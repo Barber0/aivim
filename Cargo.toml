@@ -1,0 +1,25 @@
+[package]
+name = "aivim"
+version = "0.1.0"
+edition = "2021"
+description = "A Vim-compatible text editor written in Rust"
+authors = ["AIVim Contributors"]
+license = "MIT"
+
+[workspace]
+members = [
+    "crates/aivim-core",
+    "crates/aivim-tui",
+]
+
+[dependencies]
+aivim-core = { path = "crates/aivim-core" }
+aivim-tui = { path = "crates/aivim-tui" }
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[[bin]]
+name = "aivim"
+path = "src/main.rs"

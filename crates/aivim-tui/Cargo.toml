@@ -1,0 +1,13 @@
+[package]
+name = "aivim-tui"
+version = "0.1.0"
+edition = "2021"
+description = "Terminal UI for AIVim"
+
+[dependencies]
+aivim-core = { path = "../aivim-core" }
+crossterm = "0.27"
+ratatui = "0.24"
+thiserror = "1.0"
+tracing = "0.1"
+unicode-width = "0.1"
