@@ -131,7 +131,7 @@ impl Cursor {
         }
     }
 
-    fn update_preferred_column(&mut self) {
+    pub fn update_preferred_column(&mut self) {
         self.preferred_column = Some(self.column);
     }
 

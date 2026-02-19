@@ -19,8 +19,6 @@ pub struct Editor {
     register_manager: RegisterManager,
     undo_stack: Vec<EditState>,
     redo_stack: Vec<EditState>,
-    /// 标志：下一个插入应该在光标后（用于 'a' 命令）
-    insert_after_cursor: bool,
 }
 
 #[derive(Clone)]
@@ -47,7 +45,6 @@ impl Editor {
             register_manager: RegisterManager::new(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
-            insert_after_cursor: false,
         }
     }
 
@@ -158,20 +155,20 @@ impl Editor {
 
     pub fn insert_char(&mut self, ch: char) {
         if self.mode.is_insert() {
-            // 检查是否需要在光标后插入
-            if self.insert_after_cursor {
-                self.insert_char_after_cursor(ch);
-                self.insert_after_cursor = false;  // 重置标志
-                return;
-            }
-
             // Get all needed info first
-            let char_idx = {
-                let buffer = self.current_buffer();
-                self.cursor.to_char_idx(buffer)
-            };
             let cursor_line = self.cursor.line;
             let cursor_col = self.cursor.column;
+
+            // 计算插入位置
+            // 在 Insert 模式下，光标可以在 line_len 位置（最后一个字符之后）
+            let char_idx = {
+                let buffer = self.current_buffer();
+                let line_start = buffer.line_to_char(cursor_line);
+                let line_len = buffer.line_len(cursor_line);
+                // 如果光标在 line_len 位置，在最后一个字符之后插入
+                // 否则，在当前光标位置插入
+                line_start + cursor_col.min(line_len)
+            };
 
             let buffer = self.current_buffer_mut();
             buffer.insert_char(char_idx, ch);
@@ -180,38 +177,13 @@ impl Editor {
             // After insertion, the line length increased by 1
             let line_len = buffer.line_len(cursor_line);
             // cursor_col + 1 is the new position after insertion
-            // We allow cursor to be at the last character position (line_len - 1)
-            self.cursor.column = (cursor_col + 1).min(line_len.saturating_sub(1));
+            // 在 Insert 模式下，光标可以在 line_len 位置（最后一个字符之后）
+            self.cursor.column = (cursor_col + 1).min(line_len);
             self.cursor.preferred_column = Some(self.cursor.column);
         }
     }
 
     /// 在光标后插入字符（用于 'a' 命令在行尾的情况）
-    fn insert_char_after_cursor(&mut self, ch: char) {
-        let cursor_line = self.cursor.line;
-        let cursor_col = self.cursor.column;
-
-        // 计算插入位置：在光标位置之后
-        let char_idx = {
-            let buffer = self.current_buffer();
-            let line_start = buffer.line_to_char(cursor_line);
-            // 在光标后插入 = line_start + cursor_col + 1
-            line_start + cursor_col + 1
-        };
-
-        let buffer = self.current_buffer_mut();
-        // 确保插入位置不超过行长度
-        let line_len = buffer.line_len(cursor_line);
-        let insert_idx = char_idx.min(line_len);
-
-        buffer.insert_char(insert_idx, ch);
-
-        // 更新光标位置
-        let new_line_len = buffer.line_len(cursor_line);
-        self.cursor.column = (cursor_col + 1).min(new_line_len.saturating_sub(1));
-        self.cursor.preferred_column = Some(self.cursor.column);
-    }
-
     /// 在光标后进入插入模式（a命令）
     pub fn enter_append_mode(&mut self) {
         // 在 Vim 中，Normal 模式的光标在字符上，Insert 模式的光标在字符之间
@@ -224,8 +196,9 @@ impl Editor {
         let at_end = self.cursor.column >= max_col;
 
         if at_end {
-            // 在行尾：设置标志，让 insert_char 在光标后插入
-            self.insert_after_cursor = true;
+            // 在行尾：将光标设置为 line_len（在最后一个字符之后）
+            // 这样在 Insert 模式下，to_char_idx 会返回正确的插入位置
+            self.cursor.column = line_len;
             self.set_mode(Mode::Insert);
         } else {
             // 不在行尾：向右移动一位，然后进入 Insert 模式
