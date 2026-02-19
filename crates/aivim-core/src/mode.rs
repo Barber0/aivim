@@ -5,6 +5,8 @@ pub enum Mode {
     Visual,
     Command,
     Replace,
+    SearchForward,
+    SearchBackward,
 }
 
 impl Mode {
@@ -15,6 +17,8 @@ impl Mode {
             Mode::Visual => "VISUAL",
             Mode::Command => "COMMAND",
             Mode::Replace => "REPLACE",
+            Mode::SearchForward => "SEARCH",
+            Mode::SearchBackward => "SEARCH",
         }
     }
 
@@ -28,6 +32,10 @@ impl Mode {
 
     pub fn is_command(&self) -> bool {
         matches!(self, Mode::Command)
+    }
+
+    pub fn is_search(&self) -> bool {
+        matches!(self, Mode::SearchForward | Mode::SearchBackward)
     }
 }
 

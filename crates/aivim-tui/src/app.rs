@@ -82,6 +82,7 @@ impl App {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),
             Mode::Command => self.handle_command_mode(key),
+            Mode::SearchForward | Mode::SearchBackward => self.handle_search_mode(key),
             _ => {}
         }
     }
@@ -169,6 +170,20 @@ impl App {
                 self.editor.set_mode(Mode::Command);
                 self.editor.command_line_mut().clear();
             }
+            KeyCode::Char('/') => {
+                self.editor.set_mode(Mode::SearchForward);
+                self.editor.command_line_mut().clear();
+            }
+            KeyCode::Char('?') => {
+                self.editor.set_mode(Mode::SearchBackward);
+                self.editor.command_line_mut().clear();
+            }
+            KeyCode::Char('n') => {
+                self.editor.search_next();
+            }
+            KeyCode::Char('N') => {
+                self.editor.search_prev();
+            }
             KeyCode::Char(c) if c.is_ascii_digit() => {
             }
             _ => {}
@@ -230,6 +245,39 @@ impl App {
                         }
                         _ => {}
                     }
+                }
+            }
+            KeyCode::Char(c) => {
+                self.editor.command_line_mut().push(c);
+            }
+            KeyCode::Backspace => {
+                self.editor.command_line_mut().pop();
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_search_mode(&mut self, key: KeyEvent) {
+        use aivim_core::SearchDirection;
+
+        match key.code {
+            KeyCode::Esc => {
+                self.editor.set_mode(Mode::Normal);
+                self.editor.command_line_mut().clear();
+            }
+            KeyCode::Enter => {
+                let pattern = self.editor.command_line().to_string();
+                self.editor.command_line_mut().clear();
+                self.editor.set_mode(Mode::Normal);
+
+                let direction = match self.editor.mode() {
+                    Mode::SearchForward => SearchDirection::Forward,
+                    Mode::SearchBackward => SearchDirection::Backward,
+                    _ => SearchDirection::Forward,
+                };
+
+                if !pattern.is_empty() {
+                    self.editor.start_search(direction, &pattern);
                 }
             }
             KeyCode::Char(c) => {

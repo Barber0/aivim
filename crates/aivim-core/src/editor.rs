@@ -4,6 +4,7 @@ use crate::edit::{Edit, EditResult};
 use crate::mode::Mode;
 use crate::motion::Motion;
 use crate::register::RegisterManager;
+use crate::search::{SearchDirection, SearchState};
 use std::collections::HashMap;
 use std::io;
 use std::path::Path;
@@ -19,6 +20,7 @@ pub struct Editor {
     register_manager: RegisterManager,
     undo_stack: Vec<EditState>,
     redo_stack: Vec<EditState>,
+    search_state: SearchState,
 }
 
 #[derive(Clone)]
@@ -45,6 +47,7 @@ impl Editor {
             register_manager: RegisterManager::new(),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
+            search_state: SearchState::new(),
         }
     }
 
@@ -352,6 +355,30 @@ impl Editor {
                     self.set_option(parts[1])?;
                 }
             }
+            cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
+                // 处理替换命令
+                if let Some((pattern, replacement, global, full_file)) = crate::replace::parse_substitute_command(command) {
+                    let line_range = if full_file {
+                        None // None 表示整个文件
+                    } else {
+                        let current_line = self.cursor.line;
+                        Some((current_line, current_line + 1))
+                    };
+                    
+                    let buffer = self.current_buffer_mut();
+                    let result = crate::replace::replace_in_buffer(
+                        buffer,
+                        &pattern,
+                        &replacement,
+                        global,
+                        line_range,
+                    );
+                    
+                    self.set_message(&format!("Replaced {} occurrence(s)", result.count));
+                } else {
+                    return Err("Invalid substitute command".to_string());
+                }
+            }
             _ => return Err(format!("Unknown command: {}", parts[0])),
         }
 
@@ -531,6 +558,76 @@ impl Editor {
         self.register_manager.set(reg, ch.to_string(), false);
 
         Some(ch)
+    }
+
+    // ==================== 搜索功能 ====================
+
+    pub fn search_state(&self) -> &SearchState {
+        &self.search_state
+    }
+
+    /// 开始搜索（/ 或 ?）
+    pub fn start_search(&mut self, direction: SearchDirection, pattern: impl Into<String>) {
+        let pattern = pattern.into();
+        if !pattern.is_empty() {
+            // 先设置搜索模式
+            let buffer_clone = {
+                let buffer = self.current_buffer();
+                buffer.clone()
+            };
+            self.search_state.set_pattern(&pattern, direction, &buffer_clone);
+            
+            // 保存到搜索寄存器
+            self.register_manager.set_search(&pattern);
+            
+            // 跳转到第一个匹配
+            let (idx, pos) = {
+                let buffer = self.current_buffer();
+                let idx = self.search_state.calc_next_match(&self.cursor, buffer);
+                let pos = idx.and_then(|i| self.search_state.get_match_pos(i));
+                (idx, pos)
+            };
+            if let (Some(i), Some(p)) = (idx, pos) {
+                self.search_state.set_current_match(i);
+                let buffer = self.current_buffer();
+                self.cursor = Cursor::from_char_idx(buffer, p);
+            }
+        }
+    }
+
+    /// 搜索下一个（n）
+    pub fn search_next(&mut self) {
+        let (idx, pos) = {
+            let buffer = self.current_buffer();
+            let idx = self.search_state.calc_next_match(&self.cursor, buffer);
+            let pos = idx.and_then(|i| self.search_state.get_match_pos(i));
+            (idx, pos)
+        };
+        if let (Some(i), Some(p)) = (idx, pos) {
+            self.search_state.set_current_match(i);
+            let buffer = self.current_buffer();
+            self.cursor = Cursor::from_char_idx(buffer, p);
+        }
+    }
+
+    /// 搜索上一个（N）
+    pub fn search_prev(&mut self) {
+        let (idx, pos) = {
+            let buffer = self.current_buffer();
+            let idx = self.search_state.calc_prev_match(&self.cursor, buffer);
+            let pos = idx.and_then(|i| self.search_state.get_match_pos(i));
+            (idx, pos)
+        };
+        if let (Some(i), Some(p)) = (idx, pos) {
+            self.search_state.set_current_match(i);
+            let buffer = self.current_buffer();
+            self.cursor = Cursor::from_char_idx(buffer, p);
+        }
+    }
+
+    /// 清除搜索高亮
+    pub fn clear_search(&mut self) {
+        self.search_state.clear();
     }
 }
 

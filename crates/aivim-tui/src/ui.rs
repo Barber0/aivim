@@ -136,6 +136,7 @@ fn mode_color(mode: aivim_core::Mode) -> Color {
         aivim_core::Mode::Visual => Color::Yellow,
         aivim_core::Mode::Command => Color::Magenta,
         aivim_core::Mode::Replace => Color::Red,
+        aivim_core::Mode::SearchForward | aivim_core::Mode::SearchBackward => Color::Cyan,
     }
 }
 
