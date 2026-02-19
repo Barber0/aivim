@@ -222,6 +222,9 @@ impl App {
                         "q" | "quit" | "qa" => {
                             self.should_quit = true;
                         }
+                        "q!" => {
+                            self.should_quit = true;
+                        }
                         "wq" => {
                             self.should_quit = true;
                         }

@@ -339,6 +339,9 @@ impl Editor {
                     return Err("No write since last change (add ! to override)".to_string());
                 }
             }
+            "q!" => {
+                // 强制退出，不保存修改
+            }
             "wq" => {
                 self.save().map_err(|e| e.to_string())?;
             }
