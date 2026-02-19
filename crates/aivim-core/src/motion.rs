@@ -94,16 +94,24 @@ fn move_word_forward(cursor: &mut Cursor, buffer: &Buffer) {
 }
 
 fn move_word_backward(cursor: &mut Cursor, buffer: &Buffer) {
-    let char_idx = cursor.to_char_idx(buffer);
+    let current_line = cursor.line;
+    let current_col = cursor.column;
     
-    if char_idx == 0 {
+    // 如果已经在行首，不移动到上一行
+    if current_col == 0 {
         return;
     }
     
-    let text = buffer.rope().to_string();
-    let preceding = &text[..char_idx];
+    let line_text = buffer.line(current_line).map(|l| l.to_string()).unwrap_or_default();
+    
+    // 移除行尾换行符
+    let line_text = line_text.strip_suffix('\n').unwrap_or(&line_text);
+    
+    // 获取当前位置之前的文本
+    let preceding = &line_text[..current_col.min(line_text.len())];
     let mut chars: Vec<char> = preceding.chars().collect();
     
+    // 跳过空白字符
     while let Some(&ch) = chars.last() {
         if ch.is_whitespace() {
             chars.pop();
@@ -112,6 +120,7 @@ fn move_word_backward(cursor: &mut Cursor, buffer: &Buffer) {
         }
     }
     
+    // 跳过标点符号
     while let Some(&ch) = chars.last() {
         if !ch.is_alphanumeric() && ch != '_' && !ch.is_whitespace() {
             chars.pop();
@@ -120,6 +129,7 @@ fn move_word_backward(cursor: &mut Cursor, buffer: &Buffer) {
         }
     }
     
+    // 跳过单词
     while let Some(&ch) = chars.last() {
         if ch.is_alphanumeric() || ch == '_' {
             chars.pop();
@@ -128,8 +138,9 @@ fn move_word_backward(cursor: &mut Cursor, buffer: &Buffer) {
         }
     }
     
-    let new_idx = chars.len();
-    *cursor = Cursor::from_char_idx(buffer, new_idx);
+    let new_col = chars.len();
+    cursor.column = new_col;
+    cursor.update_preferred_column();
 }
 
 fn move_word_end(cursor: &mut Cursor, buffer: &Buffer) {
