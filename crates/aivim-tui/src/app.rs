@@ -15,11 +15,21 @@ use std::time::Duration;
 use crate::event::{Event, EventHandler};
 use crate::ui::{self, calculate_scroll_offset};
 
+/// 操作符等待状态
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OperatorState {
+    None,
+    Delete,      // d - 等待动作
+    Yank,        // y - 等待动作
+    Change,      // c - 等待动作 (计划中)
+}
+
 pub struct App {
     editor: Editor,
     event_handler: EventHandler,
     scroll_offset: usize,
     should_quit: bool,
+    operator_state: OperatorState,
 }
 
 impl App {
@@ -29,6 +39,7 @@ impl App {
             event_handler: EventHandler::new(Duration::from_millis(50)),
             scroll_offset: 0,
             should_quit: false,
+            operator_state: OperatorState::None,
         }
     }
 
@@ -38,6 +49,7 @@ impl App {
             event_handler: EventHandler::new(Duration::from_millis(50)),
             scroll_offset: 0,
             should_quit: false,
+            operator_state: OperatorState::None,
         })
     }
 
@@ -88,6 +100,23 @@ impl App {
     }
 
     fn handle_normal_mode(&mut self, key: KeyEvent) {
+        // 检查是否有操作符等待状态
+        match self.operator_state {
+            OperatorState::Delete => {
+                self.handle_operator_motion(key, OperatorState::Delete);
+                return;
+            }
+            OperatorState::Yank => {
+                self.handle_operator_motion(key, OperatorState::Yank);
+                return;
+            }
+            OperatorState::Change => {
+                // c - 修改操作符（计划中）
+                self.operator_state = OperatorState::None;
+            }
+            OperatorState::None => {}
+        }
+
         match key.code {
             KeyCode::Char('i') => {
                 self.editor.set_mode(Mode::Insert);
@@ -142,12 +171,12 @@ impl App {
                 self.editor.execute_motion(Motion::PageDown);
             }
             KeyCode::Char('d') => {
-                // dd - 删除当前行
-                self.editor.delete_line(None);
+                // d - 进入删除操作符等待状态
+                self.operator_state = OperatorState::Delete;
             }
             KeyCode::Char('y') => {
-                // yy - 复制当前行
-                self.editor.yank_line(None);
+                // y - 进入复制操作符等待状态
+                self.operator_state = OperatorState::Yank;
             }
             KeyCode::Char('p') => {
                 // p - 在光标后粘贴
@@ -285,6 +314,49 @@ impl App {
             }
             KeyCode::Backspace => {
                 self.editor.command_line_mut().pop();
+            }
+            _ => {}
+        }
+    }
+
+    /// 处理操作符 + 动作的组合
+    fn handle_operator_motion(&mut self, key: KeyEvent, operator: OperatorState) {
+        // 重置操作符状态
+        self.operator_state = OperatorState::None;
+
+        match key.code {
+            KeyCode::Char('d') => {
+                // dd - 删除当前行
+                if operator == OperatorState::Delete {
+                    self.editor.delete_line(None);
+                }
+            }
+            KeyCode::Char('y') => {
+                // yy - 复制当前行
+                if operator == OperatorState::Yank {
+                    self.editor.yank_line(None);
+                }
+            }
+            KeyCode::Char('w') => {
+                // dw/yw - 删除/复制到下一个单词
+                let start_pos = self.editor.cursor().clone();
+                self.editor.execute_motion(Motion::WordForward);
+                let end_pos = self.editor.cursor().clone();
+
+                // 恢复光标位置并执行操作
+                // TODO: 需要实现范围删除/复制
+                // 暂时只移动光标
+            }
+            KeyCode::Char('$') => {
+                // d$/y$ - 删除/复制到行尾
+                // TODO: 实现到行尾的删除/复制
+            }
+            KeyCode::Char('0') => {
+                // d0/y0 - 删除/复制到行首
+                // TODO: 实现到行首的删除/复制
+            }
+            KeyCode::Esc => {
+                // 取消操作符
             }
             _ => {}
         }
