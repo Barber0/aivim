@@ -624,10 +624,11 @@ impl Editor {
             // 保存到搜索寄存器
             self.register_manager.set_search(&pattern);
             
-            // 跳转到第一个匹配
+            // 跳转到第一个匹配（从光标位置开始）
             let (idx, pos) = {
                 let buffer = self.current_buffer();
-                let idx = self.search_state.calc_next_match(&self.cursor, buffer);
+                // 使用 calc_first_match 找当前位置或之后的第一个匹配
+                let idx = self.search_state.calc_first_match(&self.cursor, buffer);
                 let pos = idx.and_then(|i| self.search_state.get_match_pos(i));
                 (idx, pos)
             };

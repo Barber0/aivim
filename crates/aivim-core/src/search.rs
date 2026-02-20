@@ -69,7 +69,7 @@ impl SearchState {
         }
     }
 
-    /// 计算下一个匹配的索引
+    /// 计算下一个匹配的索引（用于 n 命令）
     pub fn calc_next_match(&self, cursor: &Cursor, buffer: &Buffer) -> Option<usize> {
         if self.matches.is_empty() {
             return None;
@@ -80,14 +80,40 @@ impl SearchState {
         // 根据搜索方向找到下一个匹配
         match self.direction {
             SearchDirection::Forward => {
+                // 正向搜索：找当前位置之后的第一个匹配
                 self.matches.iter()
                     .position(|&m| m > current_char_idx)
-                    .or_else(|| if self.matches.len() > 1 { Some(0) } else { None })
+                    .or_else(|| if !self.matches.is_empty() { Some(0) } else { None })
             }
             SearchDirection::Backward => {
+                // 反向搜索：找当前位置之前的第一个匹配
                 self.matches.iter()
                     .rposition(|&m| m < current_char_idx)
-                    .or_else(|| if self.matches.len() > 1 { Some(self.matches.len() - 1) } else { None })
+                    .or_else(|| if !self.matches.is_empty() { Some(self.matches.len() - 1) } else { None })
+            }
+        }
+    }
+
+    /// 计算第一个匹配的索引（用于初始搜索 / 或 ?）
+    pub fn calc_first_match(&self, cursor: &Cursor, buffer: &Buffer) -> Option<usize> {
+        if self.matches.is_empty() {
+            return None;
+        }
+
+        let current_char_idx = cursor.to_char_idx(buffer);
+
+        match self.direction {
+            SearchDirection::Forward => {
+                // 正向搜索：找当前位置或之后的第一个匹配
+                self.matches.iter()
+                    .position(|&m| m >= current_char_idx)
+                    .or_else(|| if !self.matches.is_empty() { Some(0) } else { None })
+            }
+            SearchDirection::Backward => {
+                // 反向搜索：找当前位置或之前的第一个匹配
+                self.matches.iter()
+                    .rposition(|&m| m <= current_char_idx)
+                    .or_else(|| if !self.matches.is_empty() { Some(self.matches.len() - 1) } else { None })
             }
         }
     }
