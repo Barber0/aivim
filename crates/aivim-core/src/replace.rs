@@ -77,10 +77,18 @@ pub fn replace_in_buffer(
 
     let new_text = new_lines.join("\n") + "\n";
 
+    // 保存文件路径
+    let file_path = buffer.file_path().map(|p| p.to_path_buf());
+    
     // 更新缓冲区
     let buffer_id = buffer.id();
     *buffer = crate::buffer::Buffer::new(buffer_id);
     buffer.insert(0, &new_text);
+    
+    // 恢复文件路径
+    if let Some(path) = file_path {
+        buffer.set_file_path(path);
+    }
 
     ReplaceResult {
         count: total_replacements,
