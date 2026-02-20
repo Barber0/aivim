@@ -71,7 +71,7 @@ impl App {
 
     fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
         loop {
-            terminal.draw(|f| ui::draw(f, &self.editor, self.scroll_offset))?;
+            terminal.draw(|f| ui::draw(f, &self.editor, self.scroll_offset, self.operator_state))?;
 
             if self.should_quit {
                 break;
@@ -339,21 +339,75 @@ impl App {
             }
             KeyCode::Char('w') => {
                 // dw/yw - 删除/复制到下一个单词
-                let start_pos = self.editor.cursor().clone();
-                self.editor.execute_motion(Motion::WordForward);
-                let end_pos = self.editor.cursor().clone();
-
-                // 恢复光标位置并执行操作
-                // TODO: 需要实现范围删除/复制
-                // 暂时只移动光标
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::WordForward);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::WordForward);
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Char('b') => {
+                // db/yb - 删除/复制到上一个单词
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::WordBackward);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::WordBackward);
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Char('l') | KeyCode::Right => {
+                // dl - 删除/复制到右边一个字符
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::Right);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::Right);
+                    }
+                    _ => {}
+                }
+            }
+            KeyCode::Char('h') | KeyCode::Left => {
+                // dh - 删除/复制到左边一个字符
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::Left);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::Left);
+                    }
+                    _ => {}
+                }
             }
             KeyCode::Char('$') => {
                 // d$/y$ - 删除/复制到行尾
-                // TODO: 实现到行尾的删除/复制
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::LineEnd);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::LineEnd);
+                    }
+                    _ => {}
+                }
             }
             KeyCode::Char('0') => {
                 // d0/y0 - 删除/复制到行首
-                // TODO: 实现到行首的删除/复制
+                match operator {
+                    OperatorState::Delete => {
+                        self.editor.delete_to_motion(Motion::LineStart);
+                    }
+                    OperatorState::Yank => {
+                        self.editor.yank_to_motion(Motion::LineStart);
+                    }
+                    _ => {}
+                }
             }
             KeyCode::Esc => {
                 // 取消操作符

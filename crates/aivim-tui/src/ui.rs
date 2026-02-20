@@ -1,4 +1,5 @@
 use aivim_core::Editor;
+use crate::app::OperatorState;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -7,7 +8,7 @@ use ratatui::{
     Frame,
 };
 
-pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize) {
+pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize, operator_state: OperatorState) {
     let size = frame.size();
     
     let chunks = Layout::default()
@@ -20,7 +21,7 @@ pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize) {
         .split(size);
 
     draw_editor_area(frame, editor, chunks[0], scroll_offset);
-    draw_status_line(frame, editor, chunks[1]);
+    draw_status_line(frame, editor, chunks[1], operator_state);
     draw_command_line(frame, editor, chunks[2]);
 }
 
@@ -65,30 +66,37 @@ fn draw_editor_area(
     }
 }
 
-fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect) {
+fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect, operator_state: OperatorState) {
     use aivim_core::Mode;
-    
+
     let buffer = editor.current_buffer();
     let mode = editor.mode();
-    
+
     let file_name = buffer
         .file_path()
         .and_then(|p| p.file_name())
         .and_then(|n| n.to_str())
         .unwrap_or("[No Name]");
-    
+
     let modified_indicator = if buffer.is_modified() { " [+]" } else { "" };
-    
+
     let cursor = editor.cursor();
     let position = format!("{}:{} ", cursor.line + 1, cursor.column + 1);
-    
+
+    // 如果有操作符等待状态，显示在模式后面
+    let mode_name = if operator_state != OperatorState::None {
+        format!("{}-OPERATOR", mode.name())
+    } else {
+        mode.name().to_string()
+    };
+
     let mode_style = Style::default()
         .fg(Color::Black)
         .bg(mode_color(mode))
         .add_modifier(Modifier::BOLD);
-    
-    let mode_span = Span::styled(format!(" {} ", mode.name()), mode_style);
-    
+
+    let mode_span = Span::styled(format!(" {} ", mode_name), mode_style);
+
     let file_info = format!("{}{}", file_name, modified_indicator);
     
     let status_chunks = Layout::default()

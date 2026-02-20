@@ -629,6 +629,87 @@ impl Editor {
     pub fn clear_search(&mut self) {
         self.search_state.clear();
     }
+
+    // ==================== 范围操作 ====================
+
+    /// 删除从当前位置到目标位置的文本
+    pub fn delete_to_motion(&mut self, motion: Motion) -> Option<String> {
+        let start_idx = {
+            let buffer = self.current_buffer();
+            self.cursor.to_char_idx(buffer)
+        };
+
+        // 执行移动
+        self.execute_motion(motion);
+
+        let end_idx = {
+            let buffer = self.current_buffer();
+            self.cursor.to_char_idx(buffer)
+        };
+
+        if start_idx == end_idx {
+            return None;
+        }
+
+        let (start, end) = if start_idx < end_idx {
+            (start_idx, end_idx)
+        } else {
+            (end_idx, start_idx)
+        };
+
+        let deleted = {
+            let buffer = self.current_buffer();
+            let text = buffer.rope().to_string();
+            text[start..end].to_string()
+        };
+        
+        // 删除文本
+        {
+            let buffer = self.current_buffer_mut();
+            buffer.remove(start, end - start);
+        }
+
+        // 将删除的内容放入无名寄存器
+        self.register_manager.set_unnamed(&deleted, false);
+
+        Some(deleted)
+    }
+
+    /// 复制从当前位置到目标位置的文本
+    pub fn yank_to_motion(&mut self, motion: Motion) {
+        let start_idx = {
+            let buffer = self.current_buffer();
+            self.cursor.to_char_idx(buffer)
+        };
+
+        // 临时执行移动来计算终点
+        let mut temp_cursor = self.cursor;
+        motion.execute(&mut temp_cursor, self.current_buffer());
+
+        let end_idx = {
+            let buffer = self.current_buffer();
+            temp_cursor.to_char_idx(buffer)
+        };
+
+        if start_idx == end_idx {
+            return;
+        }
+
+        let (start, end) = if start_idx < end_idx {
+            (start_idx, end_idx)
+        } else {
+            (end_idx, start_idx)
+        };
+
+        let yanked = {
+            let buffer = self.current_buffer();
+            let text = buffer.rope().to_string();
+            text[start..end].to_string()
+        };
+
+        // 将复制的内容放入无名寄存器
+        self.register_manager.set_unnamed(&yanked, false);
+    }
 }
 
 impl Default for Editor {
