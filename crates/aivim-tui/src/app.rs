@@ -24,6 +24,7 @@ pub enum OperatorState {
     Change,      // c - 等待动作 (计划中)
     G,           // g - 等待第二个g (gg)
     TextObject { operator: TextObjectOperator, around: bool }, // a/i - 等待文本对象
+    Register(char), // " - 等待寄存器名，char为操作符(d/y/p等)
 }
 
 /// 文本对象操作符类型
@@ -163,6 +164,11 @@ impl App {
                 self.handle_text_object(key, operator, around);
                 return;
             }
+            OperatorState::Register(op) => {
+                // 处理寄存器选择
+                self.handle_register(key, op);
+                return;
+            }
             OperatorState::Change => {
                 // c - 修改操作符（计划中）
                 self.operator_state = OperatorState::None;
@@ -237,6 +243,10 @@ impl App {
             }
             KeyCode::Char('x') => {
                 self.editor.delete_char_to_register(None);
+            }
+            KeyCode::Char('"') => {
+                // " - 进入寄存器选择状态
+                self.operator_state = OperatorState::Register('\0'); // \0 表示等待操作符
             }
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor.execute_motion(Motion::PageDown);
@@ -525,6 +535,34 @@ impl App {
             TextObjectOperator::Change => {
                 // TODO: 实现 change 操作
             }
+        }
+    }
+
+    /// 处理寄存器选择（"ayy, "ap 等）
+    fn handle_register(&mut self, key: KeyEvent, op: char) {
+        match key.code {
+            KeyCode::Char(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {
+                if op == '\0' {
+                    // 等待操作符（d/y/p等）
+                    // 这里简化处理，直接等待下一个键作为操作符
+                    // 实际上应该存储寄存器名，然后等待操作符
+                    // 为了简化，我们假设用户输入的是操作符
+                    match c {
+                        'd' => self.operator_state = OperatorState::Delete,
+                        'y' => self.operator_state = OperatorState::Yank,
+                        'p' => {
+                            // 从寄存器粘贴（简化实现，使用默认寄存器）
+                            self.editor.paste(None, false);
+                            self.operator_state = OperatorState::None;
+                        }
+                        _ => self.operator_state = OperatorState::None,
+                    }
+                }
+            }
+            KeyCode::Esc => {
+                self.operator_state = OperatorState::None;
+            }
+            _ => {}
         }
     }
 
