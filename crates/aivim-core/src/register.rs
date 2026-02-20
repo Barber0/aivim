@@ -123,22 +123,43 @@ impl RegisterManager {
     }
 
     /// 设置无名寄存器，同时更新数字寄存器
-    pub fn set_unnamed(&mut self, content: impl Into<String>, linewise: bool) {
+    /// 
+    /// # 参数
+    /// - `content`: 要存储的内容
+    /// - `linewise`: 是否是整行操作
+    /// - `is_delete`: 是否是删除操作（true=删除，false=复制）
+    /// 
+    /// # 说明
+    /// - 复制操作（yw, yy）：只更新无名寄存器和 0 号寄存器，不移动数字寄存器
+    /// - 删除操作（dd, dw）：更新无名寄存器，将 0-8 移到 1-9，新内容放入 0 号
+    pub fn set_unnamed(&mut self, content: impl Into<String>, linewise: bool, is_delete: bool) {
         let content = content.into();
 
-        // 将0-8的内容移到1-9
-        for i in (1..=8).rev() {
-            self.numbered[i + 1] = self.numbered[i].clone();
+        if is_delete {
+            // 删除操作：移动数字寄存器
+            // 将1-8的内容移到2-9
+            for i in (1..=8).rev() {
+                self.numbered[i + 1] = self.numbered[i].clone();
+            }
+            // 原来的0号寄存器内容移到1号
+            self.numbered[1] = self.numbered[0].clone();
         }
 
-        // 原来的无名寄存器内容移到0
-        self.numbered[1] = self.unnamed.clone();
-
         // 设置新的无名寄存器
-        self.unnamed = Register::new('"', content, linewise);
+        self.unnamed = Register::new('"', content.clone(), linewise);
 
-        // 新内容也放入0号寄存器
-        self.numbered[0] = self.unnamed.clone();
+        // 新内容放入0号寄存器
+        self.numbered[0] = Register::new('0', content, linewise);
+    }
+
+    /// 设置无名寄存器（兼容旧版本，默认是删除操作）
+    pub fn set_unnamed_delete(&mut self, content: impl Into<String>, linewise: bool) {
+        self.set_unnamed(content, linewise, true);
+    }
+
+    /// 设置无名寄存器（复制操作）
+    pub fn set_unnamed_yank(&mut self, content: impl Into<String>, linewise: bool) {
+        self.set_unnamed(content, linewise, false);
     }
 
     /// 设置小删除寄存器
@@ -186,21 +207,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_unnamed_register() {
+    fn test_unnamed_register_yank() {
         let mut manager = RegisterManager::new();
-        manager.set_unnamed("hello", false);
+        // 复制操作 - 只更新 0 号，不移动数字寄存器
+        manager.set_unnamed_yank("hello", false);
 
         assert_eq!(manager.get('"').unwrap().content, "hello");
         assert_eq!(manager.get('0').unwrap().content, "hello");
     }
 
     #[test]
-    fn test_numbered_registers() {
+    fn test_unnamed_register_delete() {
+        let mut manager = RegisterManager::new();
+        // 删除操作 - 更新 0 号，移动数字寄存器
+        manager.set_unnamed_delete("hello", false);
+
+        assert_eq!(manager.get('"').unwrap().content, "hello");
+        assert_eq!(manager.get('0').unwrap().content, "hello");
+    }
+
+    #[test]
+    fn test_numbered_registers_delete() {
         let mut manager = RegisterManager::new();
 
-        manager.set_unnamed("first", false);
-        manager.set_unnamed("second", false);
-        manager.set_unnamed("third", false);
+        // 使用删除操作，数字寄存器应该移动
+        manager.set_unnamed_delete("first", false);
+        manager.set_unnamed_delete("second", false);
+        manager.set_unnamed_delete("third", false);
 
         // 0号应该是最新的
         assert_eq!(manager.get('0').unwrap().content, "third");
@@ -208,6 +241,22 @@ mod tests {
         assert_eq!(manager.get('1').unwrap().content, "second");
         // 2号应该是第一个
         assert_eq!(manager.get('2').unwrap().content, "first");
+    }
+
+    #[test]
+    fn test_numbered_registers_yank() {
+        let mut manager = RegisterManager::new();
+
+        // 使用复制操作，数字寄存器不应该移动
+        manager.set_unnamed_yank("first", false);
+        manager.set_unnamed_yank("second", false);
+        manager.set_unnamed_yank("third", false);
+
+        // 0号应该是最新的
+        assert_eq!(manager.get('0').unwrap().content, "third");
+        // 1-9号应该仍然是空的（因为复制不移动数字寄存器）
+        assert!(manager.get('1').unwrap().content.is_empty());
+        assert!(manager.get('2').unwrap().content.is_empty());
     }
 
     #[test]

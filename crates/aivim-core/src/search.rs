@@ -199,17 +199,17 @@ mod tests {
     }
 
     #[test]
-    fn test_next_match_forward() {
+    fn test_calc_next_match_forward() {
         let mut buffer = Buffer::new(BufferId::new(0));
         buffer.insert(0, "hello world hello");
 
         let mut search = SearchState::new();
         search.set_pattern("hello", SearchDirection::Forward, &buffer);
 
-        let mut cursor = Cursor::at_origin();
-        search.next_match(&mut cursor, &buffer);
+        let cursor = Cursor::at_origin();
+        let idx = search.calc_next_match(&cursor, &buffer);
+        let pos = idx.and_then(|i| search.get_match_pos(i));
         
-        assert_eq!(cursor.line, 0);
-        assert_eq!(cursor.column, 0); // 第一个 "hello"
+        assert_eq!(pos, Some(0)); // 第一个 "hello" 在位置 0
     }
 }

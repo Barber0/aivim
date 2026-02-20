@@ -718,8 +718,8 @@ impl Editor {
                 buffer.remove(start, end - start);
             }
 
-            // 将删除的内容放入无名寄存器
-            self.register_manager.set_unnamed(&deleted, false);
+            // 将删除的内容放入无名寄存器（删除操作）
+            self.register_manager.set_unnamed_delete(&deleted, false);
 
             // 设置光标位置：
             // - 向前删除（dw, dl）：保持在原位置
@@ -767,8 +767,8 @@ impl Editor {
             text[start..end].to_string()
         };
 
-        // 将复制的内容放入无名寄存器
-        self.register_manager.set_unnamed(&yanked, false);
+        // 将复制的内容放入无名寄存器（复制操作）
+        self.register_manager.set_unnamed_yank(&yanked, false);
     }
 
     // ==================== 文本对象操作 ====================
@@ -789,9 +789,9 @@ impl Editor {
             let buffer = self.current_buffer_mut();
             buffer.remove(start, end - start);
 
-            // 将删除的内容放入无名寄存器
+            // 将删除的内容放入无名寄存器（删除操作）
             let is_linewise = false;
-            self.register_manager.set_unnamed(&deleted, is_linewise);
+            self.register_manager.set_unnamed_delete(&deleted, is_linewise);
 
             // 更新光标位置
             self.cursor = Cursor::from_char_idx(self.current_buffer(), start);
@@ -811,9 +811,9 @@ impl Editor {
             text[start..end].to_string()
         };
 
-        // 将复制的内容放入无名寄存器
+        // 将复制的内容放入无名寄存器（复制操作）
         let is_linewise = false;
-        self.register_manager.set_unnamed(&yanked, is_linewise);
+        self.register_manager.set_unnamed_yank(&yanked, is_linewise);
 
         Some(yanked)
     }

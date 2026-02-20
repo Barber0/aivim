@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_cursor_char_idx_conversion() {
-        let buffer = Buffer::new(BufferId::new(0));
+        let mut buffer = Buffer::new(BufferId::new(0));
         buffer.insert(0, "Line 1\nLine 2\nLine 3");
         
         let cursor = Cursor::new(1, 2);
