@@ -211,13 +211,15 @@ impl Editor {
         // 获取当前光标位置信息
         let buffer = self.current_buffer();
         let line_len = buffer.line_len(self.cursor.line);
-        let max_col = line_len.saturating_sub(1);
+        // text_len 是实际文本长度（不包括换行符）
+        let text_len = line_len.saturating_sub(1);
+        let max_col = text_len.saturating_sub(1);
         let at_end = self.cursor.column >= max_col;
 
         if at_end {
-            // 在行尾：将光标设置为 line_len（在最后一个字符之后）
+            // 在行尾：将光标设置为 text_len（在最后一个字符之后，但在换行符之前）
             // 这样在 Insert 模式下，to_char_idx 会返回正确的插入位置
-            self.cursor.column = line_len;
+            self.cursor.column = text_len;
             self.set_mode(Mode::Insert);
         } else {
             // 不在行尾：向右移动一位，然后进入 Insert 模式
