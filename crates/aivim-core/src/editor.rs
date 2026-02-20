@@ -5,6 +5,7 @@ use crate::mode::Mode;
 use crate::motion::Motion;
 use crate::register::RegisterManager;
 use crate::search::{SearchDirection, SearchState};
+use crate::with_save_state;
 use std::collections::HashMap;
 use std::io;
 use std::path::Path;
@@ -372,26 +373,25 @@ impl Editor {
             cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
                 // 处理替换命令
                 if let Some((pattern, replacement, global, full_file)) = crate::replace::parse_substitute_command(command) {
-                    // 保存状态用于撤销
-                    self.save_state();
-
-                    let line_range = if full_file {
-                        None // None 表示整个文件
-                    } else {
-                        let current_line = self.cursor.line;
-                        Some((current_line, current_line + 1))
-                    };
-                    
-                    let buffer = self.current_buffer_mut();
-                    let result = crate::replace::replace_in_buffer(
-                        buffer,
-                        &pattern,
-                        &replacement,
-                        global,
-                        line_range,
-                    );
-                    
-                    self.set_message(&format!("Replaced {} occurrence(s)", result.count));
+                    with_save_state!(self, {
+                        let line_range = if full_file {
+                            None // None 表示整个文件
+                        } else {
+                            let current_line = self.cursor.line;
+                            Some((current_line, current_line + 1))
+                        };
+                        
+                        let buffer = self.current_buffer_mut();
+                        let result = crate::replace::replace_in_buffer(
+                            buffer,
+                            &pattern,
+                            &replacement,
+                            global,
+                            line_range,
+                        );
+                        
+                        self.set_message(&format!("Replaced {} occurrence(s)", result.count));
+                    });
                 } else {
                     return Err("Invalid substitute command".to_string());
                 }
@@ -670,60 +670,59 @@ impl Editor {
 
     /// 删除从当前位置到目标位置的文本
     pub fn delete_to_motion(&mut self, motion: Motion) -> Option<String> {
-        let start_cursor = self.cursor;
-        let start_idx = {
-            let buffer = self.current_buffer();
-            self.cursor.to_char_idx(buffer)
-        };
+        with_save_state!(self, {
+            let start_cursor = self.cursor;
+            let start_idx = {
+                let buffer = self.current_buffer();
+                self.cursor.to_char_idx(buffer)
+            };
 
-        // 临时执行移动来计算终点（不改变实际光标）
-        let mut temp_cursor = self.cursor;
-        motion.execute(&mut temp_cursor, self.current_buffer());
+            // 临时执行移动来计算终点（不改变实际光标）
+            let mut temp_cursor = self.cursor;
+            motion.execute(&mut temp_cursor, self.current_buffer());
 
-        let end_idx = {
-            let buffer = self.current_buffer();
-            temp_cursor.to_char_idx(buffer)
-        };
+            let end_idx = {
+                let buffer = self.current_buffer();
+                temp_cursor.to_char_idx(buffer)
+            };
 
-        if start_idx == end_idx {
-            return None;
-        }
+            if start_idx == end_idx {
+                return None;
+            }
 
-        // 保存状态用于撤销（在修改前保存）
-        self.save_state();
+            let (start, end, is_forward) = if start_idx < end_idx {
+                (start_idx, end_idx, true)
+            } else {
+                (end_idx, start_idx, false)
+            };
 
-        let (start, end, is_forward) = if start_idx < end_idx {
-            (start_idx, end_idx, true)
-        } else {
-            (end_idx, start_idx, false)
-        };
+            let deleted = {
+                let buffer = self.current_buffer();
+                let text = buffer.rope().to_string();
+                text[start..end].to_string()
+            };
 
-        let deleted = {
-            let buffer = self.current_buffer();
-            let text = buffer.rope().to_string();
-            text[start..end].to_string()
-        };
+            // 删除文本
+            {
+                let buffer = self.current_buffer_mut();
+                buffer.remove(start, end - start);
+            }
 
-        // 删除文本
-        {
-            let buffer = self.current_buffer_mut();
-            buffer.remove(start, end - start);
-        }
+            // 将删除的内容放入无名寄存器
+            self.register_manager.set_unnamed(&deleted, false);
 
-        // 将删除的内容放入无名寄存器
-        self.register_manager.set_unnamed(&deleted, false);
+            // 设置光标位置：
+            // - 向前删除（dw, dl）：保持在原位置
+            // - 向后删除（db, dh）：移动到删除区域的开头
+            if is_forward {
+                self.cursor = start_cursor;
+            } else {
+                // 向后删除，光标已经在正确的位置（start）
+                self.cursor = Cursor::from_char_idx(self.current_buffer(), start);
+            }
 
-        // 设置光标位置：
-        // - 向前删除（dw, dl）：保持在原位置
-        // - 向后删除（db, dh）：移动到删除区域的开头
-        if is_forward {
-            self.cursor = start_cursor;
-        } else {
-            // 向后删除，光标已经在正确的位置（start）
-            self.cursor = Cursor::from_char_idx(self.current_buffer(), start);
-        }
-
-        Some(deleted)
+            Some(deleted)
+        })
     }
 
     /// 复制从当前位置到目标位置的文本
