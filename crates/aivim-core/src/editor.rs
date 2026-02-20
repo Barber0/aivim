@@ -80,6 +80,11 @@ impl Editor {
     }
 
     pub fn set_mode(&mut self, mode: Mode) {
+        // 如果从 Normal 模式进入 Insert 模式，保存状态用于撤销
+        // 这样整个 Insert 会话可以作为一个单元撤销
+        if self.mode == Mode::Normal && mode == Mode::Insert {
+            self.save_state();
+        }
         self.mode = mode;
     }
 
