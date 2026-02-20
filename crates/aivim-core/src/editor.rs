@@ -372,6 +372,9 @@ impl Editor {
             cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
                 // 处理替换命令
                 if let Some((pattern, replacement, global, full_file)) = crate::replace::parse_substitute_command(command) {
+                    // 保存状态用于撤销
+                    self.save_state();
+
                     let line_range = if full_file {
                         None // None 表示整个文件
                     } else {
