@@ -166,9 +166,10 @@ impl Editor {
     }
 
     pub fn execute_edit(&mut self, edit: Edit) -> Option<EditResult> {
-        self.save_state();
-        let buffer = self.buffers.get_mut(&self.current_buffer).unwrap();
-        edit.execute(&mut self.cursor, buffer)
+        with_save_state!(self, {
+            let buffer = self.buffers.get_mut(&self.current_buffer).unwrap();
+            edit.execute(&mut self.cursor, buffer)
+        })
     }
 
     pub fn insert_char(&mut self, ch: char) {
@@ -246,62 +247,62 @@ impl Editor {
                 return;
             }
 
-            self.save_state();
+            with_save_state!(self, {
+                let column = self.cursor.column;
+                let line = self.cursor.line;
 
-            let column = self.cursor.column;
-            let line = self.cursor.line;
+                if column > 0 {
+                    let char_idx = {
+                        let buffer = self.current_buffer();
+                        self.cursor.to_char_idx(buffer)
+                    };
+                    let buffer = self.current_buffer_mut();
+                    buffer.remove_char(char_idx - 1);
 
-            if column > 0 {
-                let char_idx = {
-                    let buffer = self.current_buffer();
-                    self.cursor.to_char_idx(buffer)
-                };
-                let buffer = self.current_buffer_mut();
-                buffer.remove_char(char_idx - 1);
-
-                // Update cursor position manually
-                self.cursor.column -= 1;
-                self.cursor.preferred_column = Some(self.cursor.column);
-            } else if line > 0 {
-                let prev_line_len = {
-                    let buffer = self.current_buffer();
-                    buffer.line_len(line - 1)
-                };
-                let current_line_start = {
-                    let buffer = self.current_buffer();
-                    buffer.line_to_char(line)
-                };
-                let buffer = self.current_buffer_mut();
-                buffer.remove(current_line_start - 1, 1);
-                self.cursor.line -= 1;
-                self.cursor.column = prev_line_len;
-            }
+                    // Update cursor position manually
+                    self.cursor.column -= 1;
+                    self.cursor.preferred_column = Some(self.cursor.column);
+                } else if line > 0 {
+                    let prev_line_len = {
+                        let buffer = self.current_buffer();
+                        buffer.line_len(line - 1)
+                    };
+                    let current_line_start = {
+                        let buffer = self.current_buffer();
+                        buffer.line_to_char(line)
+                    };
+                    let buffer = self.current_buffer_mut();
+                    buffer.remove(current_line_start - 1, 1);
+                    self.cursor.line -= 1;
+                    self.cursor.column = prev_line_len;
+                }
+            });
         }
     }
 
     pub fn delete_char(&mut self) {
         if self.mode == Mode::Normal {
-            self.save_state();
+            with_save_state!(self, {
+                let char_idx = {
+                    let buffer = self.current_buffer();
+                    self.cursor.to_char_idx(buffer)
+                };
+                let cursor_line = self.cursor.line;
+                let cursor_col = self.cursor.column;
 
-            let char_idx = {
-                let buffer = self.current_buffer();
-                self.cursor.to_char_idx(buffer)
-            };
-            let cursor_line = self.cursor.line;
-            let cursor_col = self.cursor.column;
+                let buffer = self.current_buffer_mut();
+                buffer.remove_char(char_idx);
 
-            let buffer = self.current_buffer_mut();
-            buffer.remove_char(char_idx);
+                // Ensure cursor is valid manually
+                let max_line = buffer.len_lines().saturating_sub(1);
+                let new_line = cursor_line.min(max_line);
+                let line_len = buffer.line_len(new_line);
+                let max_col = line_len.saturating_sub(1);
+                let new_col = cursor_col.min(max_col);
 
-            // Ensure cursor is valid manually
-            let max_line = buffer.len_lines().saturating_sub(1);
-            let new_line = cursor_line.min(max_line);
-            let line_len = buffer.line_len(new_line);
-            let max_col = line_len.saturating_sub(1);
-            let new_col = cursor_col.min(max_col);
-
-            self.cursor.line = new_line;
-            self.cursor.column = new_col;
+                self.cursor.line = new_line;
+                self.cursor.column = new_col;
+            });
         }
     }
 
@@ -476,61 +477,61 @@ impl Editor {
             }
         };
 
-        self.save_state();
-
-        if linewise {
-            // 整行粘贴
-            let insert_line = if before_cursor {
-                self.cursor.line
-            } else {
-                self.cursor.line + 1
-            };
-
-            let char_idx = self.current_buffer().line_to_char(insert_line);
-            let buffer = self.current_buffer_mut();
-            buffer.insert(char_idx, &content);
-
-            // 移动光标到新粘贴的第一行
-            self.cursor.line = insert_line;
-            self.cursor.column = 0;
-        } else {
-            // 字符粘贴
-            let cursor_line = self.cursor.line;
-            let cursor_col = self.cursor.column;
-
-            let insert_idx = {
-                let buffer = self.current_buffer();
-                let line_start = buffer.line_to_char(cursor_line);
-                let line_len = buffer.line_len(cursor_line);
-                // line_len 包括换行符，实际文本长度是 line_len - 1
-                let text_len = line_len.saturating_sub(1);
-                
-                if before_cursor {
-                    // P - 在光标位置之前粘贴
-                    // cursor_col 应该限制在文本范围内
-                    line_start + cursor_col.min(text_len)
+        with_save_state!(self, {
+            if linewise {
+                // 整行粘贴
+                let insert_line = if before_cursor {
+                    self.cursor.line
                 } else {
-                    // p - 在光标位置之后粘贴
-                    // 如果 cursor_col >= text_len，说明在行尾，在文本末尾粘贴
-                    // 否则在 cursor_col + 1 位置粘贴
-                    if cursor_col >= text_len {
-                        // 在行尾，在文本末尾（换行符前）粘贴
-                        line_start + text_len
+                    self.cursor.line + 1
+                };
+
+                let char_idx = self.current_buffer().line_to_char(insert_line);
+                let buffer = self.current_buffer_mut();
+                buffer.insert(char_idx, &content);
+
+                // 移动光标到新粘贴的第一行
+                self.cursor.line = insert_line;
+                self.cursor.column = 0;
+            } else {
+                // 字符粘贴
+                let cursor_line = self.cursor.line;
+                let cursor_col = self.cursor.column;
+
+                let insert_idx = {
+                    let buffer = self.current_buffer();
+                    let line_start = buffer.line_to_char(cursor_line);
+                    let line_len = buffer.line_len(cursor_line);
+                    // line_len 包括换行符，实际文本长度是 line_len - 1
+                    let text_len = line_len.saturating_sub(1);
+                    
+                    if before_cursor {
+                        // P - 在光标位置之前粘贴
+                        // cursor_col 应该限制在文本范围内
+                        line_start + cursor_col.min(text_len)
                     } else {
-                        // 在行中间，在当前字符后粘贴
-                        line_start + cursor_col + 1
+                        // p - 在光标位置之后粘贴
+                        // 如果 cursor_col >= text_len，说明在行尾，在文本末尾粘贴
+                        // 否则在 cursor_col + 1 位置粘贴
+                        if cursor_col >= text_len {
+                            // 在行尾，在文本末尾（换行符前）粘贴
+                            line_start + text_len
+                        } else {
+                            // 在行中间，在当前字符后粘贴
+                            line_start + cursor_col + 1
+                        }
                     }
-                }
-            };
+                };
 
-            let buffer = self.current_buffer_mut();
-            buffer.insert(insert_idx, &content);
+                let buffer = self.current_buffer_mut();
+                buffer.insert(insert_idx, &content);
 
-            // 移动光标到粘贴内容之后
-            let content_len = content.chars().count();
-            let new_line_len = buffer.line_len(cursor_line);
-            self.cursor.column = (cursor_col + content_len).min(new_line_len.saturating_sub(1));
-        }
+                // 移动光标到粘贴内容之后
+                let content_len = content.chars().count();
+                let new_line_len = buffer.line_len(cursor_line);
+                self.cursor.column = (cursor_col + content_len).min(new_line_len.saturating_sub(1));
+            }
+        });
     }
 
     /// 删除当前行并放入寄存器 (dd)
@@ -539,61 +540,61 @@ impl Editor {
         let line_text = self.get_line_text(line_idx)?;
         let content = format!("{}\n", line_text);
 
-        self.save_state();
+        with_save_state!(self, {
+            // 保存到寄存器
+            let reg = register.unwrap_or('"');
+            self.register_manager.set(reg, &content, true);
 
-        // 保存到寄存器
-        let reg = register.unwrap_or('"');
-        self.register_manager.set(reg, &content, true);
+            // 删除行
+            let line_start = self.current_buffer().line_to_char(line_idx);
+            let line_len = self.current_buffer().line_len(line_idx);
+            let buffer = self.current_buffer_mut();
+            buffer.remove(line_start, line_len);
 
-        // 删除行
-        let line_start = self.current_buffer().line_to_char(line_idx);
-        let line_len = self.current_buffer().line_len(line_idx);
-        let buffer = self.current_buffer_mut();
-        buffer.remove(line_start, line_len);
+            // 确保至少有一行
+            if buffer.len_lines() == 0 {
+                buffer.insert(0, "\n");
+            }
 
-        // 确保至少有一行
-        if buffer.len_lines() == 0 {
-            buffer.insert(0, "\n");
-        }
+            // 调整光标位置
+            let max_line = buffer.len_lines().saturating_sub(1);
+            self.cursor.line = self.cursor.line.min(max_line);
+            self.cursor.column = 0;
 
-        // 调整光标位置
-        let max_line = buffer.len_lines().saturating_sub(1);
-        self.cursor.line = self.cursor.line.min(max_line);
-        self.cursor.column = 0;
-
-        Some(content)
+            Some(content)
+        })
     }
 
     /// 删除字符并放入寄存器 (x/d)
     pub fn delete_char_to_register(&mut self, register: Option<char>) -> Option<char> {
-        self.save_state();
+        with_save_state!(self, {
+            // 先获取光标位置信息
+            let char_idx = {
+                let buffer = self.current_buffer();
+                self.cursor.to_char_idx(buffer)
+            };
+            let cursor_line = self.cursor.line;
+            let cursor_col = self.cursor.column;
 
-        // 先获取光标位置信息
-        let char_idx = {
-            let buffer = self.current_buffer();
-            self.cursor.to_char_idx(buffer)
-        };
-        let cursor_line = self.cursor.line;
-        let cursor_col = self.cursor.column;
+            let buffer = self.current_buffer_mut();
+            let ch = buffer.remove_char(char_idx)?;
 
-        let buffer = self.current_buffer_mut();
-        let ch = buffer.remove_char(char_idx)?;
+            // 确保光标有效
+            let max_line = buffer.len_lines().saturating_sub(1);
+            let new_line = cursor_line.min(max_line);
+            let line_len = buffer.line_len(new_line);
+            let max_col = line_len.saturating_sub(1);
+            let new_col = cursor_col.min(max_col);
 
-        // 确保光标有效
-        let max_line = buffer.len_lines().saturating_sub(1);
-        let new_line = cursor_line.min(max_line);
-        let line_len = buffer.line_len(new_line);
-        let max_col = line_len.saturating_sub(1);
-        let new_col = cursor_col.min(max_col);
+            self.cursor.line = new_line;
+            self.cursor.column = new_col;
 
-        self.cursor.line = new_line;
-        self.cursor.column = new_col;
+            // 最后设置寄存器
+            let reg = register.unwrap_or('"');
+            self.register_manager.set(reg, ch.to_string(), false);
 
-        // 最后设置寄存器
-        let reg = register.unwrap_or('"');
-        self.register_manager.set(reg, ch.to_string(), false);
-
-        Some(ch)
+            Some(ch)
+        })
     }
 
     // ==================== 搜索功能 ====================
