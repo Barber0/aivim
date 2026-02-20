@@ -495,19 +495,38 @@ impl Editor {
             let cursor_line = self.cursor.line;
             let cursor_col = self.cursor.column;
 
-            let char_idx = {
+            let insert_idx = {
                 let buffer = self.current_buffer();
-                let idx = self.cursor.to_char_idx(buffer);
-                if before_cursor { idx } else { idx + 1 }
+                let line_start = buffer.line_to_char(cursor_line);
+                let line_len = buffer.line_len(cursor_line);
+                // line_len 包括换行符，实际文本长度是 line_len - 1
+                let text_len = line_len.saturating_sub(1);
+                
+                if before_cursor {
+                    // P - 在光标位置之前粘贴
+                    // cursor_col 应该限制在文本范围内
+                    line_start + cursor_col.min(text_len)
+                } else {
+                    // p - 在光标位置之后粘贴
+                    // 如果 cursor_col >= text_len，说明在行尾，在文本末尾粘贴
+                    // 否则在 cursor_col + 1 位置粘贴
+                    if cursor_col >= text_len {
+                        // 在行尾，在文本末尾（换行符前）粘贴
+                        line_start + text_len
+                    } else {
+                        // 在行中间，在当前字符后粘贴
+                        line_start + cursor_col + 1
+                    }
+                }
             };
 
             let buffer = self.current_buffer_mut();
-            buffer.insert(char_idx, &content);
+            buffer.insert(insert_idx, &content);
 
             // 移动光标到粘贴内容之后
             let content_len = content.chars().count();
-            let line_len = buffer.line_len(cursor_line);
-            self.cursor.column = (cursor_col + content_len).min(line_len.saturating_sub(1));
+            let new_line_len = buffer.line_len(cursor_line);
+            self.cursor.column = (cursor_col + content_len).min(new_line_len.saturating_sub(1));
         }
     }
 
