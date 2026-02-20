@@ -27,6 +27,7 @@ pub struct Editor {
 struct EditState {
     buffer_content: String,
     cursor: Cursor,
+    file_path: Option<std::path::PathBuf>,
 }
 
 impl Editor {
@@ -106,6 +107,7 @@ impl Editor {
         let state = EditState {
             buffer_content: buffer.to_string(),
             cursor: self.cursor,
+            file_path: buffer.file_path().map(|p| p.to_path_buf()),
         };
         self.undo_stack.push(state);
         self.redo_stack.clear();
@@ -113,9 +115,11 @@ impl Editor {
 
     pub fn undo(&mut self) {
         if let Some(state) = self.undo_stack.pop() {
+            let current_buffer = self.current_buffer();
             let current_state = EditState {
-                buffer_content: self.current_buffer().to_string(),
+                buffer_content: current_buffer.to_string(),
                 cursor: self.cursor,
+                file_path: current_buffer.file_path().map(|p| p.to_path_buf()),
             };
             self.redo_stack.push(current_state);
 
@@ -123,15 +127,21 @@ impl Editor {
             let buffer = self.buffers.get_mut(&current_buffer_id).unwrap();
             *buffer = Buffer::new(current_buffer_id);
             buffer.insert(0, &state.buffer_content);
+            // 恢复文件路径
+            if let Some(path) = state.file_path {
+                buffer.set_file_path(path);
+            }
             self.cursor = state.cursor;
         }
     }
 
     pub fn redo(&mut self) {
         if let Some(state) = self.redo_stack.pop() {
+            let current_buffer = self.current_buffer();
             let current_state = EditState {
-                buffer_content: self.current_buffer().to_string(),
+                buffer_content: current_buffer.to_string(),
                 cursor: self.cursor,
+                file_path: current_buffer.file_path().map(|p| p.to_path_buf()),
             };
             self.undo_stack.push(current_state);
 
@@ -139,6 +149,10 @@ impl Editor {
             let buffer = self.buffers.get_mut(&current_buffer_id).unwrap();
             *buffer = Buffer::new(current_buffer_id);
             buffer.insert(0, &state.buffer_content);
+            // 恢复文件路径
+            if let Some(path) = state.file_path {
+                buffer.set_file_path(path);
+            }
             self.cursor = state.cursor;
         }
     }
