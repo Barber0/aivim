@@ -22,6 +22,7 @@ pub enum OperatorState {
     Delete,      // d - 等待动作
     Yank,        // y - 等待动作
     Change,      // c - 等待动作 (计划中)
+    G,           // g - 等待第二个g (gg)
 }
 
 pub struct App {
@@ -114,6 +115,18 @@ impl App {
                 // c - 修改操作符（计划中）
                 self.operator_state = OperatorState::None;
             }
+            OperatorState::G => {
+                // g - 等待第二个 g (gg)
+                match key.code {
+                    KeyCode::Char('g') => {
+                        // gg - 跳到文件开头
+                        self.editor.execute_motion(Motion::DocumentStart);
+                    }
+                    _ => {}
+                }
+                self.operator_state = OperatorState::None;
+                return;
+            }
             OperatorState::None => {}
         }
 
@@ -151,6 +164,8 @@ impl App {
                 self.editor.execute_motion(Motion::FirstNonBlank);
             }
             KeyCode::Char('g') => {
+                // 进入 g 等待状态，等待第二个 g (gg)
+                self.operator_state = OperatorState::G;
             }
             KeyCode::Char('G') => {
                 self.editor.execute_motion(Motion::DocumentEnd);
