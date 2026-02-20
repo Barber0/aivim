@@ -118,19 +118,23 @@ fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect, operator_sta
 
 fn draw_command_line(frame: &mut Frame, editor: &Editor, area: Rect) {
     use aivim_core::Mode;
-    
-    let content = if editor.mode() == Mode::Command {
-        format!(":{}", editor.command_line())
-    } else if let Some(msg) = editor.message() {
-        msg.to_string()
-    } else {
-        String::new()
+
+    let content = match editor.mode() {
+        Mode::Command => format!(":{}", editor.command_line()),
+        Mode::SearchForward => format!("/{}", editor.command_line()),
+        Mode::SearchBackward => format!("?{}", editor.command_line()),
+        _ => {
+            if let Some(msg) = editor.message() {
+                msg.to_string()
+            } else {
+                String::new()
+            }
+        }
     };
 
-    let style = if editor.mode() == Mode::Command {
-        Style::default()
-    } else {
-        Style::default().fg(Color::Yellow)
+    let style = match editor.mode() {
+        Mode::Command | Mode::SearchForward | Mode::SearchBackward => Style::default(),
+        _ => Style::default().fg(Color::Yellow),
     };
 
     let widget = Paragraph::new(Line::from(Span::styled(content, style)));
