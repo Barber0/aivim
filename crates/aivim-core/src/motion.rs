@@ -86,9 +86,10 @@ fn move_word_forward(cursor: &mut Cursor, buffer: &Buffer) {
     
     let consumed = remaining.len() - chars.collect::<String>().len();
     let new_col = current_col + consumed;
-    
+
     // 确保不超出本行范围
-    let final_col = new_col.min(line_text.len().saturating_sub(1));
+    // 允许跳到行尾（line_text.len()），这样 dw 可以删除最后一个单词
+    let final_col = new_col.min(line_text.len());
     cursor.column = final_col;
     cursor.update_preferred_column();
 }

@@ -634,27 +634,32 @@ impl Editor {
 
     /// 删除从当前位置到目标位置的文本
     pub fn delete_to_motion(&mut self, motion: Motion) -> Option<String> {
+        let start_cursor = self.cursor;
         let start_idx = {
             let buffer = self.current_buffer();
             self.cursor.to_char_idx(buffer)
         };
 
-        // 执行移动
-        self.execute_motion(motion);
+        // 临时执行移动来计算终点（不改变实际光标）
+        let mut temp_cursor = self.cursor;
+        motion.execute(&mut temp_cursor, self.current_buffer());
 
         let end_idx = {
             let buffer = self.current_buffer();
-            self.cursor.to_char_idx(buffer)
+            temp_cursor.to_char_idx(buffer)
         };
 
         if start_idx == end_idx {
             return None;
         }
 
-        let (start, end) = if start_idx < end_idx {
-            (start_idx, end_idx)
+        // 保存状态用于撤销（在修改前保存）
+        self.save_state();
+
+        let (start, end, is_forward) = if start_idx < end_idx {
+            (start_idx, end_idx, true)
         } else {
-            (end_idx, start_idx)
+            (end_idx, start_idx, false)
         };
 
         let deleted = {
@@ -662,7 +667,7 @@ impl Editor {
             let text = buffer.rope().to_string();
             text[start..end].to_string()
         };
-        
+
         // 删除文本
         {
             let buffer = self.current_buffer_mut();
@@ -671,6 +676,16 @@ impl Editor {
 
         // 将删除的内容放入无名寄存器
         self.register_manager.set_unnamed(&deleted, false);
+
+        // 设置光标位置：
+        // - 向前删除（dw, dl）：保持在原位置
+        // - 向后删除（db, dh）：移动到删除区域的开头
+        if is_forward {
+            self.cursor = start_cursor;
+        } else {
+            // 向后删除，光标已经在正确的位置（start）
+            self.cursor = Cursor::from_char_idx(self.current_buffer(), start);
+        }
 
         Some(deleted)
     }
