@@ -121,6 +121,8 @@ impl App {
                     KeyCode::Char('g') => {
                         // gg - 跳到文件开头
                         self.editor.execute_motion(Motion::DocumentStart);
+                        // 更新滚动偏移量，确保光标在可视区域内
+                        self.update_scroll_offset(terminal_height());
                     }
                     _ => {}
                 }
@@ -169,6 +171,8 @@ impl App {
             }
             KeyCode::Char('G') => {
                 self.editor.execute_motion(Motion::DocumentEnd);
+                // 更新滚动偏移量，确保光标在可视区域内
+                self.update_scroll_offset(terminal_height());
             }
             KeyCode::Char('w') => {
                 self.editor.execute_motion(Motion::WordForward);
