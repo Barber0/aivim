@@ -680,6 +680,11 @@ impl Editor {
 
     /// 删除从当前位置到目标位置的文本
     pub fn delete_to_motion(&mut self, motion: Motion) -> Option<String> {
+        self.delete_to_motion_with_register(motion, None)
+    }
+
+    /// 删除从当前位置到目标位置的文本（支持指定寄存器）
+    pub fn delete_to_motion_with_register(&mut self, motion: Motion, register: Option<char>) -> Option<String> {
         with_save_state!(self, {
             let start_cursor = self.cursor;
             let start_idx = {
@@ -718,7 +723,12 @@ impl Editor {
                 buffer.remove(start, end - start);
             }
 
-            // 将删除的内容放入无名寄存器（删除操作）
+            // 如果指定了寄存器，存入命名寄存器
+            if let Some(reg) = register {
+                self.register_manager.set(reg, &deleted, false);
+            }
+
+            // 同时存入无名寄存器（删除操作）
             self.register_manager.set_unnamed_delete(&deleted, false);
 
             // 设置光标位置：
@@ -737,6 +747,11 @@ impl Editor {
 
     /// 复制从当前位置到目标位置的文本
     pub fn yank_to_motion(&mut self, motion: Motion) {
+        self.yank_to_motion_with_register(motion, None);
+    }
+
+    /// 复制从当前位置到目标位置的文本（支持指定寄存器）
+    pub fn yank_to_motion_with_register(&mut self, motion: Motion, register: Option<char>) {
         let start_idx = {
             let buffer = self.current_buffer();
             self.cursor.to_char_idx(buffer)
@@ -767,7 +782,12 @@ impl Editor {
             text[start..end].to_string()
         };
 
-        // 将复制的内容放入无名寄存器（复制操作）
+        // 如果指定了寄存器，存入命名寄存器
+        if let Some(reg) = register {
+            self.register_manager.set(reg, &yanked, false);
+        }
+
+        // 同时存入无名寄存器（复制操作）
         self.register_manager.set_unnamed_yank(&yanked, false);
     }
 

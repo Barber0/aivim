@@ -19,12 +19,12 @@ use crate::ui::{self, calculate_scroll_offset};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OperatorState {
     None,
-    Delete,      // d - 等待动作
-    Yank,        // y - 等待动作
-    Change,      // c - 等待动作 (计划中)
+    Delete { register: Option<char> },      // d - 等待动作，可指定寄存器
+    Yank { register: Option<char> },        // y - 等待动作，可指定寄存器
+    Change { register: Option<char> },      // c - 等待动作 (计划中)
     G,           // g - 等待第二个g (gg)
-    TextObject { operator: TextObjectOperator, around: bool }, // a/i - 等待文本对象
-    Register(char), // " - 等待寄存器名，char为操作符(d/y/p等)
+    TextObject { operator: TextObjectOperator, around: bool, register: Option<char> }, // a/i - 等待文本对象
+    RegisterPending(Option<char>), // " - 等待寄存器名，Some(char)表示已选寄存器，等待操作符
 }
 
 /// 文本对象操作符类型
@@ -113,63 +113,67 @@ impl App {
     fn handle_normal_mode(&mut self, key: KeyEvent) {
         // 检查是否有操作符等待状态
         match self.operator_state {
-            OperatorState::Delete => {
+            OperatorState::Delete { register } => {
                 // 检查是否是文本对象操作（daw, diw）
                 match key.code {
                     KeyCode::Char('a') => {
                         self.operator_state = OperatorState::TextObject { 
                             operator: TextObjectOperator::Delete, 
-                            around: true 
+                            around: true,
+                            register,
                         };
                         return;
                     }
                     KeyCode::Char('i') => {
                         self.operator_state = OperatorState::TextObject { 
                             operator: TextObjectOperator::Delete, 
-                            around: false 
+                            around: false,
+                            register,
                         };
                         return;
                     }
                     _ => {
-                        self.handle_operator_motion(key, OperatorState::Delete);
+                        self.handle_operator_motion(key, OperatorState::Delete { register });
                         return;
                     }
                 }
             }
-            OperatorState::Yank => {
+            OperatorState::Yank { register } => {
                 // 检查是否是文本对象操作（yaw, yiw）
                 match key.code {
                     KeyCode::Char('a') => {
                         self.operator_state = OperatorState::TextObject { 
                             operator: TextObjectOperator::Yank, 
-                            around: true 
+                            around: true,
+                            register,
                         };
                         return;
                     }
                     KeyCode::Char('i') => {
                         self.operator_state = OperatorState::TextObject { 
                             operator: TextObjectOperator::Yank, 
-                            around: false 
+                            around: false,
+                            register,
                         };
                         return;
                     }
                     _ => {
-                        self.handle_operator_motion(key, OperatorState::Yank);
+                        self.handle_operator_motion(key, OperatorState::Yank { register });
                         return;
                     }
                 }
             }
-            OperatorState::TextObject { operator, around } => {
+            OperatorState::TextObject { operator, around, register } => {
                 // 处理文本对象（w, W, s, S, p, P）
-                self.handle_text_object(key, operator, around);
+                self.handle_text_object(key, operator, around, register);
                 return;
             }
-            OperatorState::Register(op) => {
+            OperatorState::RegisterPending(pending_reg) => {
                 // 处理寄存器选择
-                self.handle_register(key, op);
+                self.handle_register_selection(key, pending_reg);
                 return;
             }
-            OperatorState::Change => {
+            OperatorState::Change { .. } => {
                 // c - 修改操作符（计划中）
                 self.operator_state = OperatorState::None;
             }
@@ -245,26 +249,26 @@ impl App {
                 self.editor.delete_char_to_register(None);
             }
             KeyCode::Char('"') => {
-                // " - 进入寄存器选择状态
-                self.operator_state = OperatorState::Register('\0'); // \0 表示等待操作符
+                // " - 进入寄存器选择状态（等待寄存器名）
+                self.operator_state = OperatorState::RegisterPending(None);
             }
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.editor.execute_motion(Motion::PageDown);
             }
             KeyCode::Char('d') => {
                 // d - 进入删除操作符等待状态
-                self.operator_state = OperatorState::Delete;
+                self.operator_state = OperatorState::Delete { register: None };
             }
             KeyCode::Char('y') => {
                 // y - 进入复制操作符等待状态
-                self.operator_state = OperatorState::Yank;
+                self.operator_state = OperatorState::Yank { register: None };
             }
             KeyCode::Char('p') => {
-                // p - 在光标后粘贴
+                // p - 在光标后粘贴（无名寄存器）
                 self.editor.paste(None, false);
             }
             KeyCode::Char('P') => {
-                // P - 在光标前粘贴
+                // P - 在光标前粘贴（无名寄存器）
                 self.editor.paste(None, true);
             }
             KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -400,94 +404,77 @@ impl App {
         }
     }
 
-    /// 处理操作符 + 动作的组合
+    /// 处理操作符 + 动作的组合（支持命名寄存器）
     fn handle_operator_motion(&mut self, key: KeyEvent, operator: OperatorState) {
         // 重置操作符状态
         self.operator_state = OperatorState::None;
 
+        // 提取操作符类型和寄存器
+        let (is_delete, register) = match operator {
+            OperatorState::Delete { register } => (true, register),
+            OperatorState::Yank { register } => (false, register),
+            _ => return,
+        };
+
         match key.code {
             KeyCode::Char('d') => {
                 // dd - 删除当前行
-                if operator == OperatorState::Delete {
-                    self.editor.delete_line(None);
+                if is_delete {
+                    self.editor.delete_line(register);
                 }
             }
             KeyCode::Char('y') => {
                 // yy - 复制当前行
-                if operator == OperatorState::Yank {
-                    self.editor.yank_line(None);
+                if !is_delete {
+                    self.editor.yank_line(register);
                 }
             }
             KeyCode::Char('w') => {
                 // dw/yw - 删除/复制到下一个单词
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::WordForward);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::WordForward);
-                    }
-                    _ => {}
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::WordForward, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::WordForward, register);
                 }
             }
             KeyCode::Char('b') => {
                 // db/yb - 删除/复制到上一个单词
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::WordBackward);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::WordBackward);
-                    }
-                    _ => {}
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::WordBackward, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::WordBackward, register);
                 }
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                // dl - 删除/复制到右边一个字符
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::Right);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::Right);
-                    }
-                    _ => {}
+                // dl/yl - 删除/复制到右边一个字符
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::Right, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::Right, register);
                 }
             }
             KeyCode::Char('h') | KeyCode::Left => {
-                // dh - 删除/复制到左边一个字符
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::Left);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::Left);
-                    }
-                    _ => {}
+                // dh/yh - 删除/复制到左边一个字符
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::Left, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::Left, register);
                 }
             }
             KeyCode::Char('$') => {
                 // d$/y$ - 删除/复制到行尾
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::LineEnd);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::LineEnd);
-                    }
-                    _ => {}
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::LineEnd, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::LineEnd, register);
                 }
             }
             KeyCode::Char('0') => {
                 // d0/y0 - 删除/复制到行首
-                match operator {
-                    OperatorState::Delete => {
-                        self.editor.delete_to_motion(Motion::LineStart);
-                    }
-                    OperatorState::Yank => {
-                        self.editor.yank_to_motion(Motion::LineStart);
-                    }
-                    _ => {}
+                if is_delete {
+                    self.editor.delete_to_motion_with_register(Motion::LineStart, register);
+                } else {
+                    self.editor.yank_to_motion_with_register(Motion::LineStart, register);
                 }
             }
             KeyCode::Esc => {
@@ -497,8 +484,8 @@ impl App {
         }
     }
 
-    /// 处理文本对象操作（daw, diw, yaw, yiw 等）
-    fn handle_text_object(&mut self, key: KeyEvent, operator: TextObjectOperator, around: bool) {
+    /// 处理文本对象操作（daw, diw, yaw, yiw 等，支持命名寄存器）
+    fn handle_text_object(&mut self, key: KeyEvent, operator: TextObjectOperator, around: bool, register: Option<char>) {
         use aivim_core::text_object::TextObject;
 
         // 重置操作符状态
@@ -527,10 +514,18 @@ impl App {
 
         match operator {
             TextObjectOperator::Delete => {
-                self.editor.delete_text_object(text_object);
+                if let Some(content) = self.editor.delete_text_object(text_object) {
+                    if let Some(reg) = register {
+                        self.editor.register_manager_mut().set(reg, content, false);
+                    }
+                }
             }
             TextObjectOperator::Yank => {
-                self.editor.yank_text_object(text_object);
+                if let Some(content) = self.editor.yank_text_object(text_object) {
+                    if let Some(reg) = register {
+                        self.editor.register_manager_mut().set(reg, content, false);
+                    }
+                }
             }
             TextObjectOperator::Change => {
                 // TODO: 实现 change 操作
@@ -539,30 +534,58 @@ impl App {
     }
 
     /// 处理寄存器选择（"ayy, "ap 等）
-    fn handle_register(&mut self, key: KeyEvent, op: char) {
-        match key.code {
-            KeyCode::Char(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {
-                if op == '\0' {
-                    // 等待操作符（d/y/p等）
-                    // 这里简化处理，直接等待下一个键作为操作符
-                    // 实际上应该存储寄存器名，然后等待操作符
-                    // 为了简化，我们假设用户输入的是操作符
-                    match c {
-                        'd' => self.operator_state = OperatorState::Delete,
-                        'y' => self.operator_state = OperatorState::Yank,
-                        'p' => {
-                            // 从寄存器粘贴（简化实现，使用默认寄存器）
-                            self.editor.paste(None, false);
-                            self.operator_state = OperatorState::None;
-                        }
-                        _ => self.operator_state = OperatorState::None,
+    /// 
+    /// 两步序列：
+    /// 1. " + a → 进入 RegisterPending(Some('a'))，等待操作符
+    /// 2. y + y → 执行操作，使用寄存器 a
+    fn handle_register_selection(&mut self, key: KeyEvent, pending_reg: Option<char>) {
+        match pending_reg {
+            None => {
+                // 第一步：等待寄存器名
+                match key.code {
+                    KeyCode::Char(c) if c.is_ascii_lowercase() || c.is_ascii_digit() => {
+                        // 已选择寄存器名，进入等待操作符状态
+                        self.operator_state = OperatorState::RegisterPending(Some(c));
+                    }
+                    KeyCode::Esc => {
+                        self.operator_state = OperatorState::None;
+                    }
+                    _ => {
+                        // 无效输入，取消
+                        self.operator_state = OperatorState::None;
                     }
                 }
             }
-            KeyCode::Esc => {
-                self.operator_state = OperatorState::None;
+            Some(reg) => {
+                // 第二步：已选择寄存器，等待操作符（d/y/p）
+                match key.code {
+                    KeyCode::Char('d') => {
+                        // "ad... 进入删除操作符状态，指定寄存器
+                        self.operator_state = OperatorState::Delete { register: Some(reg) };
+                    }
+                    KeyCode::Char('y') => {
+                        // "ay... 进入复制操作符状态，指定寄存器
+                        self.operator_state = OperatorState::Yank { register: Some(reg) };
+                    }
+                    KeyCode::Char('p') => {
+                        // "ap - 直接从指定寄存器粘贴
+                        self.editor.paste(Some(reg), false);
+                        self.operator_state = OperatorState::None;
+                    }
+                    KeyCode::Char('P') => {
+                        // "aP - 直接从指定寄存器粘贴（前）
+                        self.editor.paste(Some(reg), true);
+                        self.operator_state = OperatorState::None;
+                    }
+                    KeyCode::Esc => {
+                        self.operator_state = OperatorState::None;
+                    }
+                    _ => {
+                        // 无效输入，取消
+                        self.operator_state = OperatorState::None;
+                    }
+                }
             }
-            _ => {}
         }
     }
 
