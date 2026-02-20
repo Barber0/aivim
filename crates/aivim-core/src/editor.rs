@@ -5,6 +5,7 @@ use crate::mode::Mode;
 use crate::motion::Motion;
 use crate::register::RegisterManager;
 use crate::search::{SearchDirection, SearchState};
+use crate::text_object::TextObject;
 use crate::with_save_state;
 use std::collections::HashMap;
 use std::io;
@@ -768,6 +769,53 @@ impl Editor {
 
         // 将复制的内容放入无名寄存器
         self.register_manager.set_unnamed(&yanked, false);
+    }
+
+    // ==================== 文本对象操作 ====================
+
+    /// 删除文本对象（如 daw, diw）
+    pub fn delete_text_object(&mut self, obj: TextObject) -> Option<String> {
+        with_save_state!(self, {
+            let buffer = self.current_buffer();
+            let (start, end) = obj.get_range(&self.cursor, buffer)?;
+
+            let deleted = {
+                let buffer = self.current_buffer();
+                let text = buffer.rope().to_string();
+                text[start..end].to_string()
+            };
+
+            // 删除文本
+            let buffer = self.current_buffer_mut();
+            buffer.remove(start, end - start);
+
+            // 将删除的内容放入无名寄存器
+            let is_linewise = false;
+            self.register_manager.set_unnamed(&deleted, is_linewise);
+
+            // 更新光标位置
+            self.cursor = Cursor::from_char_idx(self.current_buffer(), start);
+
+            Some(deleted)
+        })
+    }
+
+    /// 复制文本对象（如 yaw, yiw）
+    pub fn yank_text_object(&mut self, obj: TextObject) -> Option<String> {
+        let buffer = self.current_buffer();
+        let (start, end) = obj.get_range(&self.cursor, buffer)?;
+
+        let yanked = {
+            let buffer = self.current_buffer();
+            let text = buffer.rope().to_string();
+            text[start..end].to_string()
+        };
+
+        // 将复制的内容放入无名寄存器
+        let is_linewise = false;
+        self.register_manager.set_unnamed(&yanked, is_linewise);
+
+        Some(yanked)
     }
 }
 

@@ -23,6 +23,15 @@ pub enum OperatorState {
     Yank,        // y - 等待动作
     Change,      // c - 等待动作 (计划中)
     G,           // g - 等待第二个g (gg)
+    TextObject { operator: TextObjectOperator, around: bool }, // a/i - 等待文本对象
+}
+
+/// 文本对象操作符类型
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TextObjectOperator {
+    Delete,  // d
+    Yank,    // y
+    Change,  // c
 }
 
 pub struct App {
@@ -104,11 +113,54 @@ impl App {
         // 检查是否有操作符等待状态
         match self.operator_state {
             OperatorState::Delete => {
-                self.handle_operator_motion(key, OperatorState::Delete);
-                return;
+                // 检查是否是文本对象操作（daw, diw）
+                match key.code {
+                    KeyCode::Char('a') => {
+                        self.operator_state = OperatorState::TextObject { 
+                            operator: TextObjectOperator::Delete, 
+                            around: true 
+                        };
+                        return;
+                    }
+                    KeyCode::Char('i') => {
+                        self.operator_state = OperatorState::TextObject { 
+                            operator: TextObjectOperator::Delete, 
+                            around: false 
+                        };
+                        return;
+                    }
+                    _ => {
+                        self.handle_operator_motion(key, OperatorState::Delete);
+                        return;
+                    }
+                }
             }
             OperatorState::Yank => {
-                self.handle_operator_motion(key, OperatorState::Yank);
+                // 检查是否是文本对象操作（yaw, yiw）
+                match key.code {
+                    KeyCode::Char('a') => {
+                        self.operator_state = OperatorState::TextObject { 
+                            operator: TextObjectOperator::Yank, 
+                            around: true 
+                        };
+                        return;
+                    }
+                    KeyCode::Char('i') => {
+                        self.operator_state = OperatorState::TextObject { 
+                            operator: TextObjectOperator::Yank, 
+                            around: false 
+                        };
+                        return;
+                    }
+                    _ => {
+                        self.handle_operator_motion(key, OperatorState::Yank);
+                        return;
+                    }
+                }
+            }
+            OperatorState::TextObject { operator, around } => {
+                // 处理文本对象（w, W, s, S, p, P）
+                self.handle_text_object(key, operator, around);
                 return;
             }
             OperatorState::Change => {
@@ -432,6 +484,47 @@ impl App {
                 // 取消操作符
             }
             _ => {}
+        }
+    }
+
+    /// 处理文本对象操作（daw, diw, yaw, yiw 等）
+    fn handle_text_object(&mut self, key: KeyEvent, operator: TextObjectOperator, around: bool) {
+        use aivim_core::text_object::TextObject;
+
+        // 重置操作符状态
+        self.operator_state = OperatorState::None;
+
+        let text_object = match key.code {
+            KeyCode::Char('w') => {
+                if around {
+                    TextObject::AroundWord
+                } else {
+                    TextObject::InnerWord
+                }
+            }
+            KeyCode::Char('W') => {
+                if around {
+                    TextObject::AroundWord
+                } else {
+                    TextObject::InnerWord
+                }
+            }
+            _ => {
+                // 不支持的文本对象，取消操作
+                return;
+            }
+        };
+
+        match operator {
+            TextObjectOperator::Delete => {
+                self.editor.delete_text_object(text_object);
+            }
+            TextObjectOperator::Yank => {
+                self.editor.yank_text_object(text_object);
+            }
+            TextObjectOperator::Change => {
+                // TODO: 实现 change 操作
+            }
         }
     }
 
