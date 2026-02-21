@@ -422,6 +422,8 @@ impl Editor {
                         let buffer_id = BufferId::new(id);
                         self.switch_buffer(buffer_id)?;
                         self.set_message(&format!("Switched to buffer {}", id));
+                        // 切换缓冲区后关闭缓冲区列表面板
+                        self.show_buffer_list = false;
                     } else {
                         return Err("Invalid buffer ID".to_string());
                     }
@@ -434,6 +436,8 @@ impl Editor {
                     Ok(_) => {
                         let id = self.current_buffer_id().as_usize();
                         self.set_message(&format!("Switched to buffer {}", id));
+                        // 切换缓冲区后关闭缓冲区列表面板
+                        self.show_buffer_list = false;
                     }
                     Err(e) => self.set_message(&e),
                 }
@@ -443,6 +447,8 @@ impl Editor {
                     Ok(_) => {
                         let id = self.current_buffer_id().as_usize();
                         self.set_message(&format!("Switched to buffer {}", id));
+                        // 切换缓冲区后关闭缓冲区列表面板
+                        self.show_buffer_list = false;
                     }
                     Err(e) => self.set_message(&e),
                 }
