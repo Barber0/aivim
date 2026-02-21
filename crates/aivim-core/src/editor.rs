@@ -15,6 +15,8 @@ pub struct Editor {
     buffers: HashMap<BufferId, Buffer>,
     current_buffer: BufferId,
     cursor: Cursor,
+    // 为每个缓冲区存储独立的光标位置
+    buffer_cursors: HashMap<BufferId, Cursor>,
     mode: Mode,
     next_buffer_id: usize,
     command_line: String,
@@ -35,14 +37,17 @@ struct EditState {
 impl Editor {
     pub fn new() -> Self {
         let mut buffers = HashMap::new();
+        let mut buffer_cursors = HashMap::new();
         let initial_buffer = Buffer::new(BufferId::new(0));
         let buffer_id = initial_buffer.id();
         buffers.insert(buffer_id, initial_buffer);
+        buffer_cursors.insert(buffer_id, Cursor::at_origin());
 
         Self {
             buffers,
             current_buffer: buffer_id,
             cursor: Cursor::at_origin(),
+            buffer_cursors,
             mode: Mode::Normal,
             next_buffer_id: 1,
             command_line: String::new(),
@@ -66,6 +71,14 @@ impl Editor {
 
     pub fn current_buffer_mut(&mut self) -> &mut Buffer {
         self.buffers.get_mut(&self.current_buffer).unwrap()
+    }
+
+    pub fn buffers_mut(&mut self) -> &mut HashMap<BufferId, Buffer> {
+        &mut self.buffers
+    }
+
+    pub fn buffer_cursors_mut(&mut self) -> &mut HashMap<BufferId, Cursor> {
+        &mut self.buffer_cursors
     }
 
     pub fn cursor(&self) -> &Cursor {
@@ -315,6 +328,9 @@ impl Editor {
     }
 
     pub fn open_file(&mut self, path: &Path) -> io::Result<()> {
+        // 保存当前缓冲区的光标位置
+        self.buffer_cursors.insert(self.current_buffer, self.cursor.clone());
+
         let buffer_id = BufferId::new(self.next_buffer_id);
         self.next_buffer_id += 1;
 
@@ -327,7 +343,9 @@ impl Editor {
 
         self.buffers.insert(buffer_id, buffer);
         self.current_buffer = buffer_id;
-        self.cursor = Cursor::at_origin();
+        
+        // 恢复该缓冲区的光标位置，如果没有则使用默认位置
+        self.cursor = self.buffer_cursors.get(&buffer_id).cloned().unwrap_or_else(Cursor::at_origin);
         self.mode = Mode::Normal;
 
         Ok(())
@@ -382,6 +400,77 @@ impl Editor {
             "reg" | "registers" => {
                 let output = self.format_registers();
                 self.set_message(&output);
+            }
+            "ls" | "buffers" => {
+                let output = self.format_buffer_list();
+                self.set_message(&output);
+            }
+            "b" | "buffer" => {
+                if parts.len() > 1 {
+                    if let Ok(id) = parts[1].parse::<usize>() {
+                        let buffer_id = BufferId::new(id);
+                        self.switch_buffer(buffer_id)?;
+                        self.set_message(&format!("Switched to buffer {}", id));
+                    } else {
+                        return Err("Invalid buffer ID".to_string());
+                    }
+                } else {
+                    return Err("Buffer ID required".to_string());
+                }
+            }
+            "bn" | "bnext" | "next" => {
+                match self.next_buffer() {
+                    Ok(_) => {
+                        let id = self.current_buffer_id().as_usize();
+                        self.set_message(&format!("Switched to buffer {}", id));
+                    }
+                    Err(e) => self.set_message(&e),
+                }
+            }
+            "bp" | "bprev" | "bprevious" | "prev" => {
+                match self.prev_buffer() {
+                    Ok(_) => {
+                        let id = self.current_buffer_id().as_usize();
+                        self.set_message(&format!("Switched to buffer {}", id));
+                    }
+                    Err(e) => self.set_message(&e),
+                }
+            }
+            "bd" | "bdelete" => {
+                let buffer_id = if parts.len() > 1 {
+                    if let Ok(id) = parts[1].parse::<usize>() {
+                        BufferId::new(id)
+                    } else {
+                        return Err("Invalid buffer ID".to_string());
+                    }
+                } else {
+                    self.current_buffer_id()
+                };
+                
+                match self.delete_buffer(buffer_id) {
+                    Ok(_) => {
+                        self.set_message(&format!("Deleted buffer {}", buffer_id.as_usize()));
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+            "bd!" | "bdelete!" => {
+                let buffer_id = if parts.len() > 1 {
+                    if let Ok(id) = parts[1].parse::<usize>() {
+                        BufferId::new(id)
+                    } else {
+                        return Err("Invalid buffer ID".to_string());
+                    }
+                } else {
+                    self.current_buffer_id()
+                };
+                
+                match self.delete_buffer_force(buffer_id) {
+                    Ok(_) => {
+                        self.set_message(&format!("Deleted buffer {}", buffer_id.as_usize()));
+                    }
+                    Err(e) => return Err(e),
+                }
             }
             cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
                 // 处理替换命令
@@ -905,6 +994,197 @@ impl Editor {
         }
 
         output
+    }
+
+    // ==================== 缓冲区管理 ====================
+
+    /// 获取所有缓冲区的列表
+    pub fn list_buffers(&self) -> Vec<(BufferId, String, bool)> {
+        let mut result = Vec::new();
+        
+        for (id, buffer) in &self.buffers {
+            let name = buffer.file_path()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("[缓冲区 {}]", id.as_usize()));
+            
+            let is_current = *id == self.current_buffer;
+            result.push((*id, name, is_current));
+        }
+        
+        // 按缓冲区ID排序
+        result.sort_by_key(|(id, _, _)| id.as_usize());
+        result
+    }
+
+    /// 格式化缓冲区列表为字符串（用于 :ls 命令）
+    pub fn format_buffer_list(&self) -> String {
+        let buffers = self.list_buffers();
+        if buffers.is_empty() {
+            return "没有缓冲区".to_string();
+        }
+
+        let mut output = String::from("缓冲区列表:\n");
+        output.push_str(&"-".repeat(40));
+        output.push('\n');
+
+        for (id, name, is_current) in buffers {
+            let current_mark = if is_current { "%" } else { " " };
+            let buffer = self.buffers.get(&id).unwrap();
+            
+            // 状态标记
+            let modified_mark = if buffer.is_modified() { "+" } else { " " };
+            
+            output.push_str(&format!(
+                "{}{}  {}  {}\n",
+                current_mark,
+                modified_mark,
+                id.as_usize(),
+                name
+            ));
+        }
+
+        output
+    }
+
+    /// 切换到指定缓冲区
+    pub fn switch_buffer(&mut self, buffer_id: BufferId) -> Result<(), String> {
+        if !self.buffers.contains_key(&buffer_id) {
+            return Err(format!("缓冲区 {} 不存在", buffer_id.as_usize()));
+        }
+
+        // 保存当前缓冲区的光标位置
+        self.buffer_cursors.insert(self.current_buffer, self.cursor.clone());
+
+        // 切换缓冲区
+        self.current_buffer = buffer_id;
+        
+        // 恢复该缓冲区的光标位置
+        self.cursor = self.buffer_cursors.get(&buffer_id).cloned().unwrap_or_else(Cursor::at_origin);
+        
+        Ok(())
+    }
+
+    /// 切换到下一个缓冲区
+    pub fn next_buffer(&mut self) -> Result<(), String> {
+        let buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
+        if buffer_ids.len() <= 1 {
+            return Err("没有其他缓冲区".to_string());
+        }
+
+        // 找到当前缓冲区的索引
+        let current_idx = buffer_ids.iter().position(|&id| id == self.current_buffer).unwrap_or(0);
+        
+        // 计算下一个索引（循环）
+        let next_idx = (current_idx + 1) % buffer_ids.len();
+        let next_buffer_id = buffer_ids[next_idx];
+
+        self.switch_buffer(next_buffer_id)
+    }
+
+    /// 切换到上一个缓冲区
+    pub fn prev_buffer(&mut self) -> Result<(), String> {
+        let buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
+        if buffer_ids.len() <= 1 {
+            return Err("没有其他缓冲区".to_string());
+        }
+
+        // 找到当前缓冲区的索引
+        let current_idx = buffer_ids.iter().position(|&id| id == self.current_buffer).unwrap_or(0);
+        
+        // 计算上一个索引（循环）
+        let prev_idx = if current_idx == 0 {
+            buffer_ids.len() - 1
+        } else {
+            current_idx - 1
+        };
+        let prev_buffer_id = buffer_ids[prev_idx];
+
+        self.switch_buffer(prev_buffer_id)
+    }
+
+    /// 删除缓冲区
+    pub fn delete_buffer(&mut self, buffer_id: BufferId) -> Result<(), String> {
+        if !self.buffers.contains_key(&buffer_id) {
+            return Err(format!("缓冲区 {} 不存在", buffer_id.as_usize()));
+        }
+
+        // 检查是否有未保存的修改
+        if let Some(buffer) = self.buffers.get(&buffer_id) {
+            if buffer.is_modified() {
+                return Err(format!("缓冲区 {} 有未保存的修改，请使用 :bd! 强制删除", buffer_id.as_usize()));
+            }
+        }
+
+        // 如果删除的是当前缓冲区，需要先切换到其他缓冲区
+        if buffer_id == self.current_buffer {
+            let other_buffer = self.buffers.keys()
+                .find(|&&id| id != buffer_id)
+                .cloned();
+            
+            if let Some(other_id) = other_buffer {
+                self.switch_buffer(other_id)?;
+            } else {
+                // 没有其他缓冲区，创建一个新的空缓冲区
+                let new_buffer = Buffer::new(BufferId::new(self.next_buffer_id));
+                self.next_buffer_id += 1;
+                let new_id = new_buffer.id();
+                self.buffers.insert(new_id, new_buffer);
+                self.buffer_cursors.insert(new_id, Cursor::at_origin());
+                self.current_buffer = new_id;
+                self.cursor = Cursor::at_origin();
+            }
+        }
+
+        // 删除缓冲区及其光标记录
+        self.buffers.remove(&buffer_id);
+        self.buffer_cursors.remove(&buffer_id);
+
+        Ok(())
+    }
+
+    /// 强制删除缓冲区（忽略未保存的修改）
+    pub fn delete_buffer_force(&mut self, buffer_id: BufferId) -> Result<(), String> {
+        if !self.buffers.contains_key(&buffer_id) {
+            return Err(format!("缓冲区 {} 不存在", buffer_id.as_usize()));
+        }
+
+        // 如果删除的是当前缓冲区，需要先切换到其他缓冲区
+        if buffer_id == self.current_buffer {
+            let other_buffer = self.buffers.keys()
+                .find(|&&id| id != buffer_id)
+                .cloned();
+            
+            if let Some(other_id) = other_buffer {
+                self.switch_buffer(other_id)?;
+            } else {
+                // 没有其他缓冲区，创建一个新的空缓冲区
+                let new_buffer = Buffer::new(BufferId::new(self.next_buffer_id));
+                self.next_buffer_id += 1;
+                let new_id = new_buffer.id();
+                self.buffers.insert(new_id, new_buffer);
+                self.buffer_cursors.insert(new_id, Cursor::at_origin());
+                self.current_buffer = new_id;
+                self.cursor = Cursor::at_origin();
+            }
+        }
+
+        // 删除缓冲区及其光标记录
+        self.buffers.remove(&buffer_id);
+        self.buffer_cursors.remove(&buffer_id);
+
+        Ok(())
+    }
+
+    /// 获取当前缓冲区ID
+    pub fn current_buffer_id(&self) -> BufferId {
+        self.current_buffer
+    }
+
+    /// 获取缓冲区数量
+    pub fn buffer_count(&self) -> usize {
+        self.buffers.len()
     }
 }
 
