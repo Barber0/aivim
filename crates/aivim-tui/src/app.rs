@@ -118,6 +118,20 @@ impl App {
             }
         }
 
+        // 如果缓冲区列表面板正在显示，优先处理关闭操作
+        if self.editor.show_buffer_list() {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                    self.editor.set_show_buffer_list(false);
+                    return;
+                }
+                _ => {
+                    // 其他按键也关闭面板，但继续处理按键
+                    self.editor.set_show_buffer_list(false);
+                }
+            }
+        }
+
         match self.editor.mode() {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),

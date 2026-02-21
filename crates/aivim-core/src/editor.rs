@@ -25,6 +25,8 @@ pub struct Editor {
     undo_stack: Vec<EditState>,
     redo_stack: Vec<EditState>,
     search_state: SearchState,
+    // UI 状态
+    show_buffer_list: bool,
 }
 
 #[derive(Clone)]
@@ -56,6 +58,7 @@ impl Editor {
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
             search_state: SearchState::new(),
+            show_buffer_list: false,
         }
     }
 
@@ -120,6 +123,14 @@ impl Editor {
 
     pub fn clear_message(&mut self) {
         self.message = None;
+    }
+
+    pub fn show_buffer_list(&self) -> bool {
+        self.show_buffer_list
+    }
+
+    pub fn set_show_buffer_list(&mut self, show: bool) {
+        self.show_buffer_list = show;
     }
 
     pub fn save_state(&mut self) {
@@ -402,8 +413,8 @@ impl Editor {
                 self.set_message(&output);
             }
             "ls" | "buffers" => {
-                let output = self.format_buffer_list();
-                self.set_message(&output);
+                // 显示缓冲区列表面板而不是消息
+                self.set_show_buffer_list(true);
             }
             "b" | "buffer" => {
                 if parts.len() > 1 {
@@ -1089,10 +1100,13 @@ impl Editor {
 
     /// 切换到下一个缓冲区
     pub fn next_buffer(&mut self) -> Result<(), String> {
-        let buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
+        let mut buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
         if buffer_ids.len() <= 1 {
             return Err("没有其他缓冲区".to_string());
         }
+
+        // 按ID排序
+        buffer_ids.sort_by_key(|id| id.as_usize());
 
         // 找到当前缓冲区的索引
         let current_idx = buffer_ids.iter().position(|&id| id == self.current_buffer).unwrap_or(0);
@@ -1125,10 +1139,13 @@ impl Editor {
 
     /// 切换到上一个缓冲区
     pub fn prev_buffer(&mut self) -> Result<(), String> {
-        let buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
+        let mut buffer_ids: Vec<BufferId> = self.buffers.keys().cloned().collect();
         if buffer_ids.len() <= 1 {
             return Err("没有其他缓冲区".to_string());
         }
+
+        // 按ID排序
+        buffer_ids.sort_by_key(|id| id.as_usize());
 
         // 找到当前缓冲区的索引
         let current_idx = buffer_ids.iter().position(|&id| id == self.current_buffer).unwrap_or(0);
