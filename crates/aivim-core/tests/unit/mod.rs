@@ -14,3 +14,4 @@ pub mod motion_test;
 pub mod buffer_test;
 pub mod cursor_test;
 pub mod register_test;
+pub mod search_test;
