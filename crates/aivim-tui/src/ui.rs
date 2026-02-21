@@ -67,7 +67,6 @@ fn draw_editor_area(
 }
 
 fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect, operator_state: OperatorState) {
-    use aivim_core::Mode;
 
     let buffer = editor.current_buffer();
     let mode = editor.mode();
@@ -82,6 +81,9 @@ fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect, operator_sta
 
     let cursor = editor.cursor();
     let position = format!("{}:{} ", cursor.line + 1, cursor.column + 1);
+
+    // 获取当前选择的寄存器信息
+    let register_info = get_register_info(operator_state);
 
     // 如果有操作符等待状态，显示在模式后面
     let mode_name = if operator_state != OperatorState::None {
@@ -99,21 +101,69 @@ fn draw_status_line(frame: &mut Frame, editor: &Editor, area: Rect, operator_sta
 
     let file_info = format!("{}{}", file_name, modified_indicator);
     
-    let status_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(10), Constraint::Min(1), Constraint::Length(15)])
-        .split(area);
+    // 如果有寄存器信息，调整布局
+    let status_chunks = if register_info.is_empty() {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(10), Constraint::Min(1), Constraint::Length(15)])
+            .split(area)
+    } else {
+        Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Length(10), Constraint::Length(5), Constraint::Min(1), Constraint::Length(15)])
+            .split(area)
+    };
 
     let mode_widget = Paragraph::new(Line::from(mode_span));
     frame.render_widget(mode_widget, status_chunks[0]);
 
-    let file_widget = Paragraph::new(file_info)
-        .alignment(Alignment::Left);
-    frame.render_widget(file_widget, status_chunks[1]);
+    // 如果有寄存器信息，显示在第二列
+    if !register_info.is_empty() {
+        let reg_style = Style::default()
+            .fg(Color::Yellow)
+            .add_modifier(Modifier::BOLD);
+        let reg_span = Span::styled(register_info, reg_style);
+        let reg_widget = Paragraph::new(Line::from(reg_span));
+        frame.render_widget(reg_widget, status_chunks[1]);
 
-    let pos_widget = Paragraph::new(position)
-        .alignment(Alignment::Right);
-    frame.render_widget(pos_widget, status_chunks[2]);
+        let file_widget = Paragraph::new(file_info)
+            .alignment(Alignment::Left);
+        frame.render_widget(file_widget, status_chunks[2]);
+
+        let pos_widget = Paragraph::new(position)
+            .alignment(Alignment::Right);
+        frame.render_widget(pos_widget, status_chunks[3]);
+    } else {
+        let file_widget = Paragraph::new(file_info)
+            .alignment(Alignment::Left);
+        frame.render_widget(file_widget, status_chunks[1]);
+
+        let pos_widget = Paragraph::new(position)
+            .alignment(Alignment::Right);
+        frame.render_widget(pos_widget, status_chunks[2]);
+    }
+}
+
+/// 根据操作符状态获取寄存器信息显示
+fn get_register_info(operator_state: OperatorState) -> String {
+    use crate::app::OperatorState;
+    
+    match operator_state {
+        // 正在等待寄存器名（刚按下 "）
+        OperatorState::RegisterPending(None) => "\"?".to_string(),
+        // 已选择寄存器，等待操作符
+        OperatorState::RegisterPending(Some(reg)) => format!("\"{}", reg),
+        // 删除操作符已指定寄存器
+        OperatorState::Delete { register: Some(reg) } => format!("\"{}", reg),
+        // 复制操作符已指定寄存器
+        OperatorState::Yank { register: Some(reg) } => format!("\"{}", reg),
+        // 修改操作符已指定寄存器
+        OperatorState::Change { register: Some(reg) } => format!("\"{}", reg),
+        // 文本对象操作符已指定寄存器
+        OperatorState::TextObject { register: Some(reg), .. } => format!("\"{}", reg),
+        // 其他情况不显示寄存器信息
+        _ => String::new(),
+    }
 }
 
 fn draw_command_line(frame: &mut Frame, editor: &Editor, area: Rect) {
