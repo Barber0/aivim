@@ -206,10 +206,11 @@ mod tests {
         let mut search = SearchState::new();
         search.set_pattern("hello", SearchDirection::Forward, &buffer);
 
-        let cursor = Cursor::at_origin();
+        // 从第一个 "hello" 之后开始搜索，应该找到第二个 "hello"
+        let cursor = Cursor::new(0, 2); // 在 "he" 之后
         let idx = search.calc_next_match(&cursor, &buffer);
         let pos = idx.and_then(|i| search.get_match_pos(i));
         
-        assert_eq!(pos, Some(0)); // 第一个 "hello" 在位置 0
+        assert_eq!(pos, Some(12)); // 第二个 "hello" 在位置 12
     }
 }
