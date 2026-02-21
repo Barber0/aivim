@@ -4,25 +4,45 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
 
-pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize, operator_state: OperatorState) {
+pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize, operator_state: OperatorState, show_registers: bool) {
     let size = frame.size();
     
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(1),
-            Constraint::Length(1),
-            Constraint::Length(1),
-        ])
-        .split(size);
+    if show_registers {
+        // 显示寄存器面板时，使用弹出窗口布局
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(size);
 
-    draw_editor_area(frame, editor, chunks[0], scroll_offset);
-    draw_status_line(frame, editor, chunks[1], operator_state);
-    draw_command_line(frame, editor, chunks[2]);
+        draw_editor_area(frame, editor, chunks[0], scroll_offset);
+        draw_status_line(frame, editor, chunks[1], operator_state);
+        draw_command_line(frame, editor, chunks[2]);
+        
+        // 在编辑器区域上方绘制寄存器面板
+        draw_registers_panel(frame, editor, chunks[0]);
+    } else {
+        // 正常布局
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(1),
+                Constraint::Length(1),
+                Constraint::Length(1),
+            ])
+            .split(size);
+
+        draw_editor_area(frame, editor, chunks[0], scroll_offset);
+        draw_status_line(frame, editor, chunks[1], operator_state);
+        draw_command_line(frame, editor, chunks[2]);
+    }
 }
 
 fn draw_editor_area(
@@ -211,4 +231,55 @@ pub fn calculate_scroll_offset(cursor_line: usize, viewport_height: usize, curre
     } else {
         current_offset
     }
+}
+
+/// 绘制寄存器内容面板
+fn draw_registers_panel(frame: &mut Frame, editor: &Editor, editor_area: Rect) {
+    // 计算面板大小（占据编辑器区域的 80%）
+    let panel_width = (editor_area.width as f32 * 0.8) as u16;
+    let panel_height = (editor_area.height as f32 * 0.8) as u16;
+    
+    let panel_x = editor_area.x + (editor_area.width - panel_width) / 2;
+    let panel_y = editor_area.y + (editor_area.height - panel_height) / 2;
+    
+    let panel_area = Rect::new(panel_x, panel_y, panel_width, panel_height);
+    
+    // 先清除背景
+    frame.render_widget(Clear, panel_area);
+    
+    // 获取寄存器内容
+    let registers_text = editor.format_registers();
+    
+    // 将文本分割成行
+    let lines: Vec<Line> = registers_text
+        .lines()
+        .map(|line| {
+            // 高亮寄存器名（如 "a）
+            if line.starts_with('"') && line.len() > 2 {
+                let reg_name = &line[..2]; // "a
+                let rest = &line[2..];
+                Line::from(vec![
+                    Span::styled(reg_name, Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                    Span::styled(rest, Style::default()),
+                ])
+            } else if line.starts_with("Registers:") || line.starts_with("---") {
+                // 标题和分隔线使用不同颜色
+                Line::from(Span::styled(line, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)))
+            } else {
+                Line::from(Span::styled(line, Style::default()))
+            }
+        })
+        .collect();
+    
+    // 创建带边框的面板
+    let panel = Paragraph::new(Text::from(lines))
+        .block(
+            Block::default()
+                .title(" Registers (press q or Esc to close) ")
+                .borders(Borders::ALL)
+                .border_style(Style::default().fg(Color::Blue))
+        )
+        .wrap(Wrap { trim: false });
+    
+    frame.render_widget(panel, panel_area);
 }

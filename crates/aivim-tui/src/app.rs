@@ -41,6 +41,7 @@ pub struct App {
     scroll_offset: usize,
     should_quit: bool,
     operator_state: OperatorState,
+    show_registers_panel: bool,
 }
 
 impl App {
@@ -51,6 +52,7 @@ impl App {
             scroll_offset: 0,
             should_quit: false,
             operator_state: OperatorState::None,
+            show_registers_panel: false,
         }
     }
 
@@ -61,6 +63,7 @@ impl App {
             scroll_offset: 0,
             should_quit: false,
             operator_state: OperatorState::None,
+            show_registers_panel: false,
         })
     }
 
@@ -82,7 +85,7 @@ impl App {
 
     fn run_loop(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> io::Result<()> {
         loop {
-            terminal.draw(|f| ui::draw(f, &self.editor, self.scroll_offset, self.operator_state))?;
+            terminal.draw(|f| ui::draw(f, &self.editor, self.scroll_offset, self.operator_state, self.show_registers_panel))?;
 
             if self.should_quit {
                 break;
@@ -101,6 +104,20 @@ impl App {
     }
 
     fn handle_key_event(&mut self, key: KeyEvent) {
+        // 如果寄存器面板正在显示，优先处理关闭操作
+        if self.show_registers_panel {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                    self.show_registers_panel = false;
+                    return;
+                }
+                _ => {
+                    // 其他按键也关闭面板，但继续处理按键
+                    self.show_registers_panel = false;
+                }
+            }
+        }
+
         match self.editor.mode() {
             Mode::Normal => self.handle_normal_mode(key),
             Mode::Insert => self.handle_insert_mode(key),
@@ -344,7 +361,10 @@ impl App {
                 self.editor.command_line_mut().clear();
                 self.editor.set_mode(Mode::Normal);
                 
-                if let Err(e) = self.editor.execute_command(&command) {
+                // 检查是否是 registers 命令
+                if command == "reg" || command == "registers" {
+                    self.show_registers_panel = true;
+                } else if let Err(e) = self.editor.execute_command(&command) {
                     self.editor.set_message(e);
                 } else {
                     match command.as_str() {
