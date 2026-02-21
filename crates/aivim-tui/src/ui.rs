@@ -169,25 +169,26 @@ fn get_register_info(operator_state: OperatorState) -> String {
 fn draw_command_line(frame: &mut Frame, editor: &Editor, area: Rect) {
     use aivim_core::Mode;
 
-    let content = match editor.mode() {
-        Mode::Command => format!(":{}", editor.command_line()),
-        Mode::SearchForward => format!("/{}", editor.command_line()),
-        Mode::SearchBackward => format!("?{}", editor.command_line()),
+    let (text, style) = match editor.mode() {
+        Mode::Command => (format!(":{}", editor.command_line()), Style::default()),
+        Mode::SearchForward => (format!("/{}", editor.command_line()), Style::default()),
+        Mode::SearchBackward => (format!("?{}", editor.command_line()), Style::default()),
         _ => {
             if let Some(msg) = editor.message() {
-                msg.to_string()
+                (msg.to_string(), Style::default().fg(Color::Yellow))
             } else {
-                String::new()
+                (String::new(), Style::default().fg(Color::Yellow))
             }
         }
     };
 
-    let style = match editor.mode() {
-        Mode::Command | Mode::SearchForward | Mode::SearchBackward => Style::default(),
-        _ => Style::default().fg(Color::Yellow),
-    };
+    // 支持多行消息：将文本按行分割，每行创建一个 Line
+    let lines: Vec<Line> = text
+        .lines()
+        .map(|line| Line::from(Span::styled(line.to_string(), style)))
+        .collect();
 
-    let widget = Paragraph::new(Line::from(Span::styled(content, style)));
+    let widget = Paragraph::new(lines);
     frame.render_widget(widget, area);
 }
 
