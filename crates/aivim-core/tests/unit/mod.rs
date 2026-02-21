@@ -11,6 +11,7 @@
 //! - buffer_snapshot_test.rs -> src/buffer_snapshot.rs
 //! - registers_command_test.rs -> src/editor.rs (registers command)
 //! - clipboard_test.rs -> src/register.rs (clipboard integration)
+//! - edit_test.rs -> src/edit.rs
 
 pub mod motion_test;
 pub mod buffer_test;
@@ -18,6 +19,8 @@ pub mod cursor_test;
 pub mod register_test;
 pub mod search_test;
 pub mod text_object_test;
+pub mod replace_test;
 pub mod buffer_snapshot_test;
 pub mod registers_command_test;
 pub mod clipboard_test;
+pub mod edit_test;

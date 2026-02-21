@@ -86,6 +86,7 @@ impl Edit {
                 let remaining = &text[start_idx..];
                 let mut chars = remaining.chars().peekable();
                 
+                // 第一阶段：删除单词字符
                 while let Some(&ch) = chars.peek() {
                     if ch.is_alphanumeric() || ch == '_' {
                         chars.next();
@@ -94,8 +95,26 @@ impl Edit {
                     }
                 }
                 
+                // 第二阶段：删除跟随的非单词字符（但不包括换行符）
                 while let Some(&ch) = chars.peek() {
+                    // 遇到换行符立即停止，不跨行删除
+                    if ch == '\n' {
+                        break;
+                    }
                     if !ch.is_alphanumeric() && ch != '_' && !ch.is_whitespace() {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                
+                // 第三阶段：删除跟随的空白字符（但不包括换行符）
+                while let Some(&ch) = chars.peek() {
+                    // 遇到换行符立即停止，不跨行删除
+                    if ch == '\n' {
+                        break;
+                    }
+                    if ch.is_whitespace() {
                         chars.next();
                     } else {
                         break;
