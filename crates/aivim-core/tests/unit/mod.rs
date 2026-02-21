@@ -11,3 +11,6 @@
 //! - buffer_snapshot_test.rs -> src/buffer_snapshot.rs
 
 pub mod motion_test;
+pub mod buffer_test;
+pub mod cursor_test;
+pub mod register_test;
