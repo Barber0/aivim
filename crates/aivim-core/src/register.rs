@@ -184,6 +184,60 @@ impl RegisterManager {
         }
     }
 
+    /// 获取所有非空寄存器
+    ///
+    /// 返回按名称排序的寄存器列表，包括：
+    /// - 无名寄存器 "
+    /// - 数字寄存器 0-9
+    /// - 命名寄存器 a-z
+    /// - 只读寄存器 %, #, :, .
+    /// - 搜索寄存器 /
+    pub fn get_all_registers(&self) -> Vec<&Register> {
+        let mut registers = Vec::new();
+
+        // 无名寄存器
+        if !self.unnamed.is_empty() {
+            registers.push(&self.unnamed);
+        }
+
+        // 数字寄存器 0-9
+        for reg in &self.numbered {
+            if !reg.is_empty() {
+                registers.push(reg);
+            }
+        }
+
+        // 小删除寄存器
+        if !self.small_delete.is_empty() {
+            registers.push(&self.small_delete);
+        }
+
+        // 命名寄存器 a-z（按名称排序）
+        let mut named_regs: Vec<&Register> = self.named.values().collect();
+        named_regs.sort_by_key(|r| r.name);
+        for reg in named_regs {
+            if !reg.is_empty() {
+                registers.push(reg);
+            }
+        }
+
+        // 只读寄存器 %, #, :, .
+        for name in &['%', '#', ':', '.'] {
+            if let Some(reg) = self.readonly.get(name) {
+                if !reg.is_empty() {
+                    registers.push(reg);
+                }
+            }
+        }
+
+        // 搜索寄存器
+        if !self.search.is_empty() {
+            registers.push(&self.search);
+        }
+
+        registers
+    }
+
     /// 获取系统剪贴板内容（模拟）
     pub fn get_clipboard(&self) -> Option<String> {
         // TODO: 实际实现需要使用外部crate如arboard

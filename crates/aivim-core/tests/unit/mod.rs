@@ -9,6 +9,7 @@
 //! - text_object_test.rs -> src/text_object.rs
 //! - replace_test.rs -> src/replace.rs
 //! - buffer_snapshot_test.rs -> src/buffer_snapshot.rs
+//! - registers_command_test.rs -> src/editor.rs (registers command)
 
 pub mod motion_test;
 pub mod buffer_test;
@@ -16,3 +17,4 @@ pub mod cursor_test;
 pub mod register_test;
 pub mod search_test;
 pub mod buffer_snapshot_test;
+pub mod registers_command_test;

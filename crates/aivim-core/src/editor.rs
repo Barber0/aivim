@@ -379,6 +379,10 @@ impl Editor {
                     self.set_option(parts[1])?;
                 }
             }
+            "reg" | "registers" => {
+                let output = self.format_registers();
+                self.set_message(&output);
+            }
             cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
                 // 处理替换命令
                 if let Some((pattern, replacement, global, full_file)) = crate::replace::parse_substitute_command(command) {
@@ -836,6 +840,47 @@ impl Editor {
         self.register_manager.set_unnamed_yank(&yanked, is_linewise);
 
         Some(yanked)
+    }
+
+    // ==================== 寄存器显示 ====================
+
+    /// 格式化所有寄存器内容用于显示
+    ///
+    /// 返回格式化的字符串，每行一个寄存器：
+    /// "a   第一行内容
+    ///      第二行内容"
+    pub fn format_registers(&self) -> String {
+        let registers = self.register_manager.get_all_registers();
+
+        if registers.is_empty() {
+            return "No registers".to_string();
+        }
+
+        let mut output = String::new();
+        output.push_str("Registers:\n");
+        output.push_str("----------\n");
+
+        for reg in registers {
+            let name = reg.name;
+            let content = &reg.content;
+            let linewise = if reg.linewise { " (linewise)" } else { "" };
+
+            // 截断过长的内容
+            let max_len = 80;
+            let display_content = if content.len() > max_len {
+                format!("{}...", &content[..max_len])
+            } else {
+                content.clone()
+            };
+
+            // 将内容中的换行符替换为可见表示
+            let display_content = display_content.replace('\n', "↵");
+            let display_content = display_content.replace('\t', "→");
+
+            output.push_str(&format!("\"{}   {}{}\n", name, display_content, linewise));
+        }
+
+        output
     }
 }
 
