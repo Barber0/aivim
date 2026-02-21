@@ -80,19 +80,32 @@ impl RegisterManager {
     }
 
     /// 获取寄存器内容
-    pub fn get(&self, name: char) -> Option<&Register> {
+    ///
+    /// 特殊寄存器:
+    /// - '*' 和 '+' 映射到系统剪贴板
+    pub fn get(&self, name: char) -> Option<Register> {
         match name {
-            '"' => Some(&self.unnamed),
-            '-' => Some(&self.small_delete),
-            '0'..='9' => self.numbered.get(name.to_digit(10).unwrap() as usize),
-            'a'..='z' | 'A'..='Z' => self.named.get(&name.to_ascii_lowercase()),
-            '%' | '#' | ':' | '.' => self.readonly.get(&name),
-            '/' => Some(&self.search),
+            '"' => Some(self.unnamed.clone()),
+            '-' => Some(self.small_delete.clone()),
+            '0'..='9' => self.numbered.get(name.to_digit(10).unwrap() as usize).cloned(),
+            'a'..='z' | 'A'..='Z' => self.named.get(&name.to_ascii_lowercase()).cloned(),
+            '%' | '#' | ':' | '.' => self.readonly.get(&name).cloned(),
+            '/' => Some(self.search.clone()),
+            '*' | '+' => {
+                // 系统剪贴板寄存器
+                self.get_clipboard().map(|content| {
+                    Register::new(name, content, false)
+                })
+            }
             _ => None,
         }
     }
 
     /// 设置寄存器内容
+    /// 设置寄存器内容
+    ///
+    /// 特殊寄存器:
+    /// - '*' 和 '+' 映射到系统剪贴板
     pub fn set(&mut self, name: char, content: impl Into<String>, linewise: bool) {
         let content = content.into();
         match name {
@@ -118,6 +131,10 @@ impl RegisterManager {
                 }
             }
             '/' => self.search = Register::new('/', content, linewise),
+            '*' | '+' => {
+                // 系统剪贴板寄存器
+                self.set_clipboard(&content);
+            }
             _ => {}
         }
     }
@@ -238,15 +255,33 @@ impl RegisterManager {
         registers
     }
 
-    /// 获取系统剪贴板内容（模拟）
+    /// 获取系统剪贴板内容
     pub fn get_clipboard(&self) -> Option<String> {
-        // TODO: 实际实现需要使用外部crate如arboard
-        None
+        use arboard::Clipboard;
+        
+        match Clipboard::new() {
+            Ok(mut clipboard) => clipboard.get_text().ok(),
+            Err(e) => {
+                tracing::warn!("Failed to access clipboard: {}", e);
+                None
+            }
+        }
     }
 
-    /// 设置系统剪贴板内容（模拟）
-    pub fn set_clipboard(&mut self, _content: &str) {
-        // TODO: 实际实现需要使用外部crate如arboard
+    /// 设置系统剪贴板内容
+    pub fn set_clipboard(&mut self, content: &str) {
+        use arboard::Clipboard;
+        
+        match Clipboard::new() {
+            Ok(mut clipboard) => {
+                if let Err(e) = clipboard.set_text(content) {
+                    tracing::warn!("Failed to set clipboard content: {}", e);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to access clipboard: {}", e);
+            }
+        }
     }
 }
 
