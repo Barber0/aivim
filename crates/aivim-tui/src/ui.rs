@@ -8,10 +8,10 @@ use ratatui::{
     Frame,
 };
 
-pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize, operator_state: OperatorState, show_registers: bool) {
+pub fn draw(frame: &mut Frame, editor: &Editor, scroll_offset: usize, operator_state: OperatorState) {
     let size = frame.size();
     
-    if show_registers {
+    if editor.show_registers_panel() {
         // 显示寄存器面板时，使用弹出窗口布局
         let chunks = Layout::default()
             .direction(Direction::Vertical)

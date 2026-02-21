@@ -118,10 +118,8 @@ fn test_execute_registers_command() {
     let result = editor.execute_command("registers");
     
     assert!(result.is_ok());
-    // 消息应该包含 "No registers"
-    let message = editor.message();
-    assert!(message.is_some());
-    assert!(message.unwrap().contains("No registers"));
+    // 现在 :registers 命令显示面板而不是消息
+    assert!(editor.show_registers_panel());
 }
 
 #[test]
@@ -132,7 +130,6 @@ fn test_execute_reg_command_short() {
     let result = editor.execute_command("reg");
     
     assert!(result.is_ok());
-    let message = editor.message();
-    assert!(message.is_some());
-    assert!(message.unwrap().contains("No registers"));
+    // 现在 :reg 命令显示面板而不是消息
+    assert!(editor.show_registers_panel());
 }

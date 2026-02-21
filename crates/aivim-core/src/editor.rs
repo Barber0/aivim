@@ -27,6 +27,7 @@ pub struct Editor {
     search_state: SearchState,
     // UI 状态
     show_buffer_list: bool,
+    show_registers_panel: bool,
 }
 
 #[derive(Clone)]
@@ -59,6 +60,7 @@ impl Editor {
             redo_stack: Vec::new(),
             search_state: SearchState::new(),
             show_buffer_list: false,
+            show_registers_panel: false,
         }
     }
 
@@ -131,6 +133,14 @@ impl Editor {
 
     pub fn set_show_buffer_list(&mut self, show: bool) {
         self.show_buffer_list = show;
+    }
+
+    pub fn show_registers_panel(&self) -> bool {
+        self.show_registers_panel
+    }
+
+    pub fn set_show_registers_panel(&mut self, show: bool) {
+        self.show_registers_panel = show;
     }
 
     pub fn save_state(&mut self) {
@@ -409,8 +419,8 @@ impl Editor {
                 }
             }
             "reg" | "registers" => {
-                let output = self.format_registers();
-                self.set_message(&output);
+                // 显示寄存器列表面板而不是消息
+                self.show_registers_panel = true;
             }
             "ls" | "buffers" => {
                 // 显示缓冲区列表面板而不是消息
