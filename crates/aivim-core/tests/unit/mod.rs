@@ -12,6 +12,7 @@
 //! - registers_command_test.rs -> src/editor.rs (registers command)
 //! - clipboard_test.rs -> src/register.rs (clipboard integration)
 //! - edit_test.rs -> src/edit.rs
+//! - editor_delete_test.rs -> src/editor.rs (delete operations)
 
 pub mod motion_test;
 pub mod buffer_test;
@@ -24,3 +25,4 @@ pub mod buffer_snapshot_test;
 pub mod registers_command_test;
 pub mod clipboard_test;
 pub mod edit_test;
+pub mod editor_delete_test;

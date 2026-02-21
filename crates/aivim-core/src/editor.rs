@@ -700,10 +700,34 @@ impl Editor {
             let mut temp_cursor = self.cursor;
             motion.execute(&mut temp_cursor, self.current_buffer());
 
-            let end_idx = {
+            let mut end_idx = {
                 let buffer = self.current_buffer();
                 temp_cursor.to_char_idx(buffer)
             };
+
+            if start_idx == end_idx {
+                return None;
+            }
+
+            // 对于单词移动，检查是否跨越了换行符
+            // 如果是，截断到当前行的末尾，不删除换行符
+            if matches!(motion, Motion::WordForward | Motion::WordBackward) {
+                let buffer = self.current_buffer();
+                let text = buffer.rope().to_string();
+                
+                // 确保 start_idx < end_idx
+                let (start, end) = if start_idx < end_idx {
+                    (start_idx, end_idx)
+                } else {
+                    (end_idx, start_idx)
+                };
+                
+                // 检查删除范围内是否有换行符
+                if let Some(newline_pos) = text[start..end].find('\n') {
+                    // 有换行符，截断到换行符之前
+                    end_idx = start + newline_pos;
+                }
+            }
 
             if start_idx == end_idx {
                 return None;
