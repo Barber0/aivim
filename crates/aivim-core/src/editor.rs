@@ -472,6 +472,27 @@ impl Editor {
                     Err(e) => return Err(e),
                 }
             }
+            "new" => {
+                // 创建新的空缓冲区
+                self.create_new_buffer();
+                let id = self.current_buffer_id().as_usize();
+                self.set_message(&format!("Created new buffer {}", id));
+            }
+            "e" | "edit" => {
+                if parts.len() > 1 {
+                    let path = Path::new(parts[1]);
+                    match self.open_file(path) {
+                        Ok(_) => {
+                            self.set_message(&format!("Opened {}", parts[1]));
+                        }
+                        Err(e) => {
+                            return Err(format!("Failed to open {}: {}", parts[1], e));
+                        }
+                    }
+                } else {
+                    return Err("Filename required".to_string());
+                }
+            }
             cmd if cmd.starts_with("s/") || cmd.starts_with("%s/") => {
                 // 处理替换命令
                 if let Some((pattern, replacement, global, full_file)) = crate::replace::parse_substitute_command(command) {
@@ -1081,6 +1102,25 @@ impl Editor {
         let next_buffer_id = buffer_ids[next_idx];
 
         self.switch_buffer(next_buffer_id)
+    }
+
+    /// 创建新的空缓冲区
+    pub fn create_new_buffer(&mut self) {
+        // 保存当前缓冲区的光标位置
+        self.buffer_cursors.insert(self.current_buffer, self.cursor.clone());
+
+        // 创建新缓冲区
+        let buffer_id = BufferId::new(self.next_buffer_id);
+        self.next_buffer_id += 1;
+
+        let buffer = Buffer::new(buffer_id);
+        self.buffers.insert(buffer_id, buffer);
+        self.buffer_cursors.insert(buffer_id, Cursor::at_origin());
+
+        // 切换到新缓冲区
+        self.current_buffer = buffer_id;
+        self.cursor = Cursor::at_origin();
+        self.mode = Mode::Normal;
     }
 
     /// 切换到上一个缓冲区

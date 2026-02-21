@@ -127,14 +127,21 @@ fn test_buffer_navigation_wraps() {
         editor.buffer_cursors_mut().insert(BufferId::new(i), Cursor::at_origin());
     }
     
+    // 获取所有缓冲区ID并排序
+    let mut buffer_ids: Vec<usize> = editor.list_buffers().iter().map(|(id, _, _)| id.as_usize()).collect();
+    buffer_ids.sort();
+    
     // 在最后一个缓冲区时执行 next 应该回到第一个
-    editor.switch_buffer(BufferId::new(3)).unwrap();
+    let last_id = BufferId::new(*buffer_ids.last().unwrap());
+    let first_id = BufferId::new(*buffer_ids.first().unwrap());
+    
+    editor.switch_buffer(last_id).unwrap();
     editor.next_buffer().unwrap();
-    assert_eq!(editor.current_buffer_id().as_usize(), 0);
+    assert_eq!(editor.current_buffer_id(), first_id);
     
     // 在第一个缓冲区时执行 prev 应该到最后一个
     editor.prev_buffer().unwrap();
-    assert_eq!(editor.current_buffer_id().as_usize(), 3);
+    assert_eq!(editor.current_buffer_id(), last_id);
 }
 
 // ==================== 缓冲区删除测试 ====================
