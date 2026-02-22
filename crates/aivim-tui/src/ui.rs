@@ -107,15 +107,25 @@ fn draw_editor_area(
             let is_current_line = *line_idx == cursor.line;
             
             // 计算要显示的行号
-            let display_number = if show_relativenumber && !is_current_line {
-                // 相对行号：显示与当前行的距离
-                if *line_idx > cursor.line {
-                    line_idx - cursor.line
+            let display_number = if show_relativenumber {
+                if is_current_line {
+                    // 相对行号模式下，当前行显示 0
+                    // 混合模式（number + relativenumber）时，当前行显示绝对行号
+                    if show_number {
+                        line_idx + 1
+                    } else {
+                        0
+                    }
                 } else {
-                    cursor.line - line_idx
+                    // 相对行号：显示与当前行的距离
+                    if *line_idx > cursor.line {
+                        line_idx - cursor.line
+                    } else {
+                        cursor.line - line_idx
+                    }
                 }
             } else {
-                // 绝对行号或当前行（混合模式时当前行显示绝对行号）
+                // 绝对行号
                 line_idx + 1
             };
 
