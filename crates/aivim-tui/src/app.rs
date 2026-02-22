@@ -410,15 +410,16 @@ impl App {
                 self.editor.command_line_mut().clear();
             }
             KeyCode::Enter => {
-                let pattern = self.editor.command_line().to_string();
-                self.editor.command_line_mut().clear();
-                self.editor.set_mode(Mode::Normal);
-
+                // 先保存方向，再改变模式
                 let direction = match self.editor.mode() {
                     Mode::SearchForward => SearchDirection::Forward,
                     Mode::SearchBackward => SearchDirection::Backward,
                     _ => SearchDirection::Forward,
                 };
+
+                let pattern = self.editor.command_line().to_string();
+                self.editor.command_line_mut().clear();
+                self.editor.set_mode(Mode::Normal);
 
                 if !pattern.is_empty() {
                     self.editor.start_search(direction, &pattern);
