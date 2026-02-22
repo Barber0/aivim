@@ -193,4 +193,36 @@ impl Buffer {
     pub fn rope(&self) -> &Rope {
         &self.rope
     }
+
+    /// 计算从行首到指定列的显示宽度（考虑宽字符）
+    pub fn line_display_width_to_column(&self, line_idx: usize, column: usize) -> usize {
+        use unicode_width::UnicodeWidthStr;
+        
+        if let Some(line) = self.line(line_idx) {
+            let line_str = line.to_string();
+            let char_indices: Vec<_> = line_str.char_indices().collect();
+            
+            if column >= char_indices.len() {
+                // 如果列超出范围，返回整行的显示宽度
+                return UnicodeWidthStr::width(line_str.as_str());
+            }
+            
+            // 获取从行首到指定列的子字符串
+            let end_byte_idx = char_indices[column].0;
+            let substring = &line_str[..end_byte_idx];
+            
+            UnicodeWidthStr::width(substring)
+        } else {
+            0
+        }
+    }
+
+    /// 获取整行的显示宽度
+    pub fn line_display_width(&self, line_idx: usize) -> usize {
+        use unicode_width::UnicodeWidthStr;
+        
+        self.line(line_idx)
+            .map(|l| UnicodeWidthStr::width(l.to_string().as_str()))
+            .unwrap_or(0)
+    }
 }

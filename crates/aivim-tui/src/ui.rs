@@ -98,6 +98,7 @@ fn draw_editor_area(
     let visible_height = text_area.height as usize;
     let visible_lines = editor.visible_lines(visible_height, scroll_offset);
     let cursor = editor.cursor();
+    let buffer = editor.current_buffer();
 
     // 绘制行号
     if line_number_width > 0 {
@@ -185,8 +186,9 @@ fn draw_editor_area(
 
     frame.render_widget(editor_widget, text_area);
 
-    // 设置光标位置（考虑行号区域偏移）
-    let cursor_x = text_area.x + cursor.column as u16;
+    // 设置光标位置（考虑行号区域偏移和宽字符）
+    let display_width = buffer.line_display_width_to_column(cursor.line, cursor.column);
+    let cursor_x = text_area.x + display_width as u16;
     let cursor_y = text_area.y + (cursor.line - scroll_offset) as u16;
     
     if cursor_y < text_area.y + text_area.height && cursor_y >= text_area.y {
