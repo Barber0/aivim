@@ -10,6 +10,7 @@ pub mod register;
 pub mod search;
 pub mod replace;
 pub mod text_object;
+pub mod window;
 
 pub use buffer::Buffer;
 pub use buffer_snapshot::{BufferSnapshot, SnapshotManager};
@@ -20,6 +21,7 @@ pub use register::{Register, RegisterManager};
 pub use search::{SearchState, SearchDirection};
 pub use replace::{ReplaceResult, replace_in_buffer, parse_substitute_command};
 pub use text_object::{TextObject, parse_text_object};
+pub use window::{Window, WindowId, WindowManager, SplitDirection};
 
 // 重新导出宏
 pub use macros::SaveStateDocumentation;
