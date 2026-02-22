@@ -68,16 +68,96 @@ fn draw_editor_area(
     area: Rect,
     scroll_offset: usize,
 ) {
-    let visible_height = area.height as usize;
+    let options = editor.options();
+    let show_number = options.number;
+    let show_relativenumber = options.relativenumber;
+    let show_cursorline = options.cursorline;
+
+    // 计算行号区域宽度
+    let line_number_width = if show_number || show_relativenumber {
+        // 获取文件总行数，计算需要的宽度
+        let total_lines = editor.current_buffer().len_lines().max(1);
+        let digits = total_lines.to_string().len();
+        (digits.max(3) + 1) as u16  // 至少3位宽度，加1个空格
+    } else {
+        0
+    };
+
+    // 分割区域：行号区域 + 文本区域
+    let chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length(line_number_width),
+            Constraint::Min(1),
+        ])
+        .split(area);
+
+    let line_number_area = chunks[0];
+    let text_area = chunks[1];
+
+    let visible_height = text_area.height as usize;
     let visible_lines = editor.visible_lines(visible_height, scroll_offset);
     let cursor = editor.cursor();
 
+    // 绘制行号
+    if line_number_width > 0 {
+        let mut line_number_lines: Vec<Line> = Vec::new();
+        
+        for (line_idx, _) in &visible_lines {
+            let is_current_line = *line_idx == cursor.line;
+            
+            // 计算要显示的行号
+            let display_number = if show_relativenumber && !is_current_line {
+                // 相对行号：显示与当前行的距离
+                if *line_idx > cursor.line {
+                    line_idx - cursor.line
+                } else {
+                    cursor.line - line_idx
+                }
+            } else {
+                // 绝对行号或当前行（混合模式时当前行显示绝对行号）
+                line_idx + 1
+            };
+
+            // 行号样式
+            let style = if is_current_line && show_cursorline {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else if is_current_line {
+                Style::default()
+                    .fg(Color::Yellow)
+            } else {
+                Style::default()
+                    .fg(Color::DarkGray)
+            };
+
+            let line_num_str = format!("{:>width$}", display_number, width = line_number_width as usize - 1);
+            line_number_lines.push(Line::from(vec![
+                Span::styled(line_num_str, style),
+                Span::styled(" ", Style::default()),
+            ]));
+        }
+
+        // 填充空行
+        while line_number_lines.len() < visible_height {
+            line_number_lines.push(Line::from(""));
+        }
+
+        let line_number_widget = Paragraph::new(Text::from(line_number_lines))
+            .block(Block::default())
+            .style(Style::default().bg(Color::Black));
+
+        frame.render_widget(line_number_widget, line_number_area);
+    }
+
+    // 绘制文本内容
     let mut text_lines: Vec<Line> = visible_lines
         .into_iter()
         .map(|(line_idx, content)| {
             let is_current_line = line_idx == cursor.line;
-            let style = if is_current_line {
-                Style::default().bg(Color::DarkGray)
+            let style = if is_current_line && show_cursorline {
+                Style::default().bg(Color::Rgb(40, 40, 40))  // 柔和的高亮背景
             } else {
                 Style::default()
             };
@@ -93,12 +173,13 @@ fn draw_editor_area(
         .block(Block::default())
         .wrap(Wrap { trim: false });
 
-    frame.render_widget(editor_widget, area);
+    frame.render_widget(editor_widget, text_area);
 
-    let cursor_x = area.x + cursor.column as u16;
-    let cursor_y = area.y + (cursor.line - scroll_offset) as u16;
+    // 设置光标位置（考虑行号区域偏移）
+    let cursor_x = text_area.x + cursor.column as u16;
+    let cursor_y = text_area.y + (cursor.line - scroll_offset) as u16;
     
-    if cursor_y < area.y + area.height && cursor_y >= area.y {
+    if cursor_y < text_area.y + text_area.height && cursor_y >= text_area.y {
         frame.set_cursor(cursor_x, cursor_y);
     }
 }

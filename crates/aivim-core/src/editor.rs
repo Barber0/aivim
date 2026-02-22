@@ -11,6 +11,27 @@ use std::collections::HashMap;
 use std::io;
 use std::path::Path;
 
+/// 编辑器配置选项
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EditorOptions {
+    /// 显示绝对行号
+    pub number: bool,
+    /// 显示相对行号
+    pub relativenumber: bool,
+    /// 高亮当前行
+    pub cursorline: bool,
+}
+
+impl Default for EditorOptions {
+    fn default() -> Self {
+        Self {
+            number: false,
+            relativenumber: false,
+            cursorline: false,
+        }
+    }
+}
+
 pub struct Editor {
     buffers: HashMap<BufferId, Buffer>,
     current_buffer: BufferId,
@@ -28,6 +49,8 @@ pub struct Editor {
     // UI 状态
     show_buffer_list: bool,
     show_registers_panel: bool,
+    // 编辑器配置
+    options: EditorOptions,
 }
 
 #[derive(Clone)]
@@ -61,6 +84,7 @@ impl Editor {
             search_state: SearchState::new(),
             show_buffer_list: false,
             show_registers_panel: false,
+            options: EditorOptions::default(),
         }
     }
 
@@ -125,6 +149,14 @@ impl Editor {
 
     pub fn clear_message(&mut self) {
         self.message = None;
+    }
+
+    pub fn options(&self) -> &EditorOptions {
+        &self.options
+    }
+
+    pub fn options_mut(&mut self) -> &mut EditorOptions {
+        &mut self.options
     }
 
     pub fn show_buffer_list(&self) -> bool {
@@ -555,8 +587,28 @@ impl Editor {
     fn set_option(&mut self, option: &str) -> Result<(), String> {
         match option {
             "nu" | "number" => {
+                self.options.number = true;
+                self.set_message("Enabled line numbers");
             }
             "nonu" | "nonumber" => {
+                self.options.number = false;
+                self.set_message("Disabled line numbers");
+            }
+            "rnu" | "relativenumber" => {
+                self.options.relativenumber = true;
+                self.set_message("Enabled relative line numbers");
+            }
+            "nornu" | "norelativenumber" => {
+                self.options.relativenumber = false;
+                self.set_message("Disabled relative line numbers");
+            }
+            "cursorline" => {
+                self.options.cursorline = true;
+                self.set_message("Enabled cursor line highlighting");
+            }
+            "nocursorline" => {
+                self.options.cursorline = false;
+                self.set_message("Disabled cursor line highlighting");
             }
             _ => return Err(format!("Unknown option: {}", option)),
         }

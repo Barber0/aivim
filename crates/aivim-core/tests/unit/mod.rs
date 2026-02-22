@@ -14,6 +14,7 @@
 //! - edit_test.rs -> src/edit.rs
 //! - editor_delete_test.rs -> src/editor.rs (delete operations)
 //! - buffer_manager_test.rs -> src/editor.rs (buffer management)
+//! - line_number_test.rs -> src/editor.rs (line number options)
 
 pub mod motion_test;
 pub mod buffer_test;
@@ -28,3 +29,4 @@ pub mod clipboard_test;
 pub mod edit_test;
 pub mod editor_delete_test;
 pub mod buffer_manager_test;
+pub mod line_number_test;
