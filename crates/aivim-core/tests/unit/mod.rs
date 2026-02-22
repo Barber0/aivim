@@ -15,6 +15,7 @@
 //! - editor_delete_test.rs -> src/editor.rs (delete operations)
 //! - buffer_manager_test.rs -> src/editor.rs (buffer management)
 //! - line_number_test.rs -> src/editor.rs (line number options)
+//! - chinese_test.rs -> src/buffer.rs (chinese text support)
 
 pub mod motion_test;
 pub mod buffer_test;
@@ -30,3 +31,4 @@ pub mod edit_test;
 pub mod editor_delete_test;
 pub mod buffer_manager_test;
 pub mod line_number_test;
+pub mod chinese_test;
